@@ -1,580 +1,840 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Comeback Coach</title>
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Comeback Coach ✨</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #253861; font-family: 'DM Sans', sans-serif; color: #BDCCDE; }
-    ::-webkit-scrollbar { display: none; }
-    @keyframes slideDown {
-      from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
-      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
-    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{min-height:100vh}
+    body{background:#fdf6f0;font-family:'Jost',sans-serif;color:#3a2a2a;}
+    ::-webkit-scrollbar{display:none}
+    .card{background:rgba(255,255,255,0.72);border:1px solid rgba(220,180,180,0.35);border-radius:18px;backdrop-filter:blur(8px);}
+    .card-pink{background:linear-gradient(135deg,rgba(255,235,235,0.9),rgba(255,245,240,0.9));border:1px solid rgba(220,160,160,0.4);border-radius:18px;}
+    .btn-primary{background:linear-gradient(135deg,#e8a0a0,#d4748a);color:#fff;border:none;border-radius:99px;padding:12px 28px;font-family:'Jost',sans-serif;font-weight:600;font-size:14px;cursor:pointer;letter-spacing:0.5px;box-shadow:0 4px 18px rgba(212,116,138,0.35);transition:all 0.2s;}
+    .btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 22px rgba(212,116,138,0.45)}
+    .btn-soft{background:rgba(255,255,255,0.8);color:#b06070;border:1px solid rgba(220,160,160,0.4);border-radius:99px;padding:10px 20px;font-family:'Jost',sans-serif;font-weight:500;font-size:13px;cursor:pointer;transition:all 0.2s;}
   </style>
 </head>
 <body>
-  <div id="root"></div>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect} = React;
 
-  <script type="text/babel">
-    const { useState, useEffect } = React;
+const C = {
+  rose:"#d4748a",blush:"#e8a0a0",peach:"#f0b897",cream:"#fdf6f0",
+  champagne:"#f5e6c8",lavender:"#c9a8d4",sage:"#9dbfa0",
+  text:"#3a2a2a",muted:"#9a7a7a",border:"rgba(220,160,160,0.35)",
+};
 
-    // ─── DATA ─────────────────────────────────────────────────────────────────
+const CLASSES = [
+  {id:"warrior",name:"Iron Maiden",   icon:"⚔️",desc:"Strength-first fighter. Born to lift, built to last.",color:C.rose,     bonusStat:"str",passive:"Battle Hardened: Strength workouts grant +2 bonus STR",skills:["Power Surge","Battle Cry","Iron Will"]},
+  {id:"ranger", name:"Wild Huntress", icon:"🏹",desc:"Swift and graceful. Footwork and agility are her magic.",color:C.sage,    bonusStat:"agi",passive:"Fleet Foot: Agility workouts grant +2 bonus AGI",    skills:["Quick Draw","Wind Step","Eagle Eye"]},
+  {id:"mage",   name:"Arcane Darling",icon:"🔮",desc:"Mind-body sorceress. Mobility and core are her spellcraft.",color:C.lavender,bonusStat:"pwr",passive:"Arcane Flow: Mobility workouts grant +2 bonus PWR",  skills:["Starlight","Mana Veil","Cosmic Pulse"]},
+  {id:"paladin",name:"Golden Paladin",icon:"✨",desc:"Radiant healer-warrior. Vitality and resilience above all.",color:"#e8c97a",bonusStat:"vit",passive:"Divine Grace: Every workout restores +1 VIT",         skills:["Holy Light","Lay on Hands","Sacred Guard"]},
+];
 
-    const PHASES = [
-      { id: 1, name: "Foundation", subtitle: "Rebuild from the ground up",   weeks: "Weeks 1–4",  color: "#4ade80", xpNeeded: 0    },
-      { id: 2, name: "Strength",   subtitle: "Load the body progressively",  weeks: "Weeks 5–10", color: "#facc15", xpNeeded: 600  },
-      { id: 3, name: "Power",      subtitle: "Explosive sport readiness",    weeks: "Weeks 11–16",color: "#f97316", xpNeeded: 1400 },
-      { id: 4, name: "Sport",      subtitle: "Back on the court",            weeks: "Weeks 17+",  color: "#a78bfa", xpNeeded: 2600 },
-    ];
+const SKILLS_DATA = {
+  "Power Surge": {icon:"💥",desc:"Next Strength workout gives +5 STR",cost:1,stat:"str",bonus:5},
+  "Battle Cry":  {icon:"📣",desc:"All workouts give +10 XP for 3 sessions",cost:1,stat:"xp",bonus:10},
+  "Iron Will":   {icon:"🔩",desc:"Streak protection — miss 1 day, no penalty",cost:2,stat:"str",bonus:3},
+  "Quick Draw":  {icon:"🎯",desc:"Next Agility workout gives +5 AGI",cost:1,stat:"agi",bonus:5},
+  "Wind Step":   {icon:"💨",desc:"Cardio workouts grant double END",cost:2,stat:"end",bonus:4},
+  "Eagle Eye":   {icon:"🦅",desc:"Reveal boss weakness for +20% damage",cost:1,stat:"agi",bonus:3},
+  "Starlight":   {icon:"⭐",desc:"Next Power workout gives +5 PWR",cost:1,stat:"pwr",bonus:5},
+  "Mana Veil":   {icon:"🔵",desc:"Next boss battle: take half damage",cost:1,stat:"pwr",bonus:3},
+  "Cosmic Pulse":{icon:"🌀",desc:"Mobility workouts grant double PWR",cost:2,stat:"pwr",bonus:4},
+  "Holy Light":  {icon:"☀️",desc:"Next workout gives +5 VIT",cost:1,stat:"vit",bonus:5},
+  "Lay on Hands":{icon:"🙌",desc:"Restore 20 HP after a workout",cost:1,stat:"vit",bonus:4},
+  "Sacred Guard":{icon:"🛡️",desc:"Negate one failed boss attempt",cost:2,stat:"vit",bonus:3},
+};
 
-    const WORKOUTS = [
-      { id:"p1_core",  phase:1, title:"Core Reconnect",        type:"Strength + Mobility", equipment:["Mat"],        duration:25, xp:50,
-        exercises:[
-          {name:"Diaphragmatic Breathing",      sets:"3",reps:"10 breaths",    note:"Inhale through nose, feel belly + ribs expand"},
-          {name:"Heel Slides",                  sets:"3",reps:"10 each side",  note:"Keep lower back neutral, engage deep core"},
-          {name:"Glute Bridge",                 sets:"3",reps:"12",            note:"Drive through heels, squeeze glutes at top"},
-          {name:"Bird-Dog",                     sets:"3",reps:"8 each side",   note:"Slow and controlled, no spinal rotation"},
-          {name:"Cat-Cow",                      sets:"2",reps:"10 cycles",     note:"Move through full range, breath with movement"},
-          {name:"Child's Pose Hold",            sets:"2",reps:"45 sec",        note:"Relax hips back, breathe into lower back"},
-        ]},
-      { id:"p1_mobility", phase:1, title:"Hip & Shoulder Flow", type:"Mobility", equipment:["Mat"], duration:30, xp:45,
-        exercises:[
-          {name:"World's Greatest Stretch",          sets:"2",reps:"5 each side",  note:"Take your time through each position"},
-          {name:"90/90 Hip Rotations",               sets:"3",reps:"8 each side",  note:"Sit tall, rotate from hip not spine"},
-          {name:"Thread the Needle",                 sets:"2",reps:"8 each side",  note:"Keep hips stacked, reach arm through"},
-          {name:"Doorframe Chest Opener",            sets:"3",reps:"30 sec hold",  note:"Great for undoing nursing/carrying posture"},
-          {name:"Half-Kneeling Hip Flexor Stretch",  sets:"2",reps:"45 sec each",  note:"Tuck pelvis gently under"},
-          {name:"Ankle Circles + Calf Raises",       sets:"2",reps:"10 each dir",  note:"Wake up the lower chain"},
-        ]},
-      { id:"p1_bike", phase:1, title:"Easy Cardio Reboot", type:"Cardio", equipment:["Bike"], duration:20, xp:40,
-        exercises:[
-          {name:"Warm-Up Spin",      sets:"1",reps:"5 min",   note:"Zone 1 — conversational pace, very easy"},
-          {name:"Steady State Ride", sets:"1",reps:"12 min",  note:"Zone 2 — slight effort, still able to talk"},
-          {name:"Cool-Down Spin",    sets:"1",reps:"3 min",   note:"Gradually reduce cadence"},
-        ]},
-      { id:"p2_lower", phase:2, title:"Lower Body Power", type:"Strength", equipment:["Ball","Mat"], duration:35, xp:70,
-        exercises:[
-          {name:"Ball Wall Squat",                       sets:"4",reps:"12",          note:"Ball between wall and lower back, feet out"},
-          {name:"Single-Leg Glute Bridge",               sets:"3",reps:"10 each",     note:"Progress from two-leg version"},
-          {name:"Lateral Band Walk (wide stance)",       sets:"3",reps:"15 steps ea", note:"Stay low, mimic defensive slide"},
-          {name:"Ball Hamstring Curl",                   sets:"3",reps:"10",          note:"Hips up, roll ball in and out"},
-          {name:"Step-Back Lunge",                       sets:"3",reps:"10 each",     note:"Control descent, drive through front heel"},
-          {name:"Calf Raise on Step",                    sets:"3",reps:"15",          note:"Single leg for more challenge"},
-        ]},
-      { id:"p2_upper", phase:2, title:"Upper Body & Posture", type:"Strength", equipment:["Ball","Mat"], duration:30, xp:65,
-        exercises:[
-          {name:"Ball Push-Up",          sets:"3",reps:"8–10",     note:"Hands on ball for instability challenge"},
-          {name:"Ball Prone Y-T-W",      sets:"3",reps:"8 each",   note:"Chest on ball, small precise movements"},
-          {name:"Pike Push-Up",          sets:"3",reps:"8",         note:"Targets shoulders for overhead sport demands"},
-          {name:"Tricep Dip (off chair)",sets:"3",reps:"10",        note:"Keep elbows close to body"},
-          {name:"Ball Chest Stretch",    sets:"2",reps:"45 sec",    note:"Drape back over ball, open chest"},
-          {name:"Neck & Trap Release",   sets:"2",reps:"30 sec ea", note:"Side tilt, ear to shoulder"},
-        ]},
-      { id:"p2_agility", phase:2, title:"Footwork Fundamentals", type:"Agility + Cardio", equipment:["Mat"], duration:25, xp:60,
-        exercises:[
-          {name:"Lateral Shuffle (slow)",    sets:"4",reps:"30 sec",         note:"Soft knees, weight on balls of feet"},
-          {name:"Pivot Steps",               sets:"3",reps:"10 each side",   note:"Tennis pivot — outside foot plants"},
-          {name:"Tuck Step + Cross Step",    sets:"3",reps:"10 each",        note:"Basketball crossover footwork pattern"},
-          {name:"Forward/Back Hop",          sets:"3",reps:"20 sec",         note:"Small hops, land softly"},
-          {name:"Bike Intervals",            sets:"4",reps:"2 min on/1 easy",note:"Push to Zone 3 on work intervals"},
-        ]},
-      { id:"p3_explosive", phase:3, title:"Explosive Lower Body", type:"Power", equipment:["Mat"], duration:35, xp:90,
-        exercises:[
-          {name:"Jump Squat (low height)",       sets:"4",reps:"8",              note:"Land softly — toes, ball, heel"},
-          {name:"Lateral Bound",                 sets:"4",reps:"6 each side",    note:"Push off outside foot, stick landing 2 sec"},
-          {name:"Split Jump",                    sets:"3",reps:"6 each",         note:"Power from back leg, land in lunge"},
-          {name:"Reactive Lateral Shuffle",      sets:"4",reps:"5 dir changes",  note:"Accelerate and decelerate with control"},
-          {name:"Ball Drop Squat",               sets:"3",reps:"10",             note:"Toss ball, drop into squat, catch"},
-          {name:"Single Leg Balance to Hop",     sets:"3",reps:"5 each",         note:"Balance 2 sec, small hop forward, rebalance"},
-        ]},
-      { id:"p3_core_power", phase:3, title:"Rotational Core", type:"Power + Core", equipment:["Ball","Mat"], duration:30, xp:85,
-        exercises:[
-          {name:"Ball Russian Twist",            sets:"4",reps:"12 each side",  note:"Slow with control, rotate from thoracic spine"},
-          {name:"Pallof Press (isometric hold)", sets:"3",reps:"20 sec ea side",note:"Resist rotation — arms extended"},
-          {name:"Ball Rollout",                  sets:"3",reps:"10",             note:"Kneel on mat, roll ball out slowly"},
-          {name:"Plank to Rotation",             sets:"3",reps:"8 each side",   note:"From plank, rotate hip up toward ceiling"},
-          {name:"Dead Bug with Ball",            sets:"3",reps:"8 each side",   note:"Squeeze ball between hands and knees"},
-        ]},
-    ];
+const GEAR_UNLOCKS = [
+  {phase:1,name:"Adventurer's Sash",icon:"🎀",desc:"Your first ribbon of courage"},
+  {phase:2,name:"Knight's Tiara",   icon:"👸",desc:"Crown of the strengthened"},
+  {phase:3,name:"Dragon's Bloom",   icon:"🌸",desc:"Petal-forged in fire"},
+  {phase:4,name:"Champion's Crown", icon:"👑",desc:"You returned. You conquered."},
+];
 
-    const ACHIEVEMENTS = [
-      { id:"first_workout", icon:"🌱", title:"First Step",        desc:"Complete your first workout",     condition:s => s.totalWorkouts >= 1    },
-      { id:"streak3",       icon:"🔥", title:"On Fire",           desc:"3-day streak",                    condition:s => s.streak >= 3           },
-      { id:"streak7",       icon:"⚡", title:"Week Warrior",      desc:"7-day streak",                    condition:s => s.streak >= 7           },
-      { id:"phase2",        icon:"💪", title:"Foundation Built",  desc:"Reach Strength phase",            condition:s => s.totalXP >= 600        },
-      { id:"phase3",        icon:"🏋️", title:"Strength Unlocked", desc:"Reach Power phase",               condition:s => s.totalXP >= 1400       },
-      { id:"phase4",        icon:"🏆", title:"Sport Ready",       desc:"Reach Sport phase",               condition:s => s.totalXP >= 2600       },
-      { id:"workouts10",    icon:"🎯", title:"Consistent",        desc:"Complete 10 workouts",            condition:s => s.totalWorkouts >= 10   },
-      { id:"workouts25",    icon:"🌟", title:"Dedicated",         desc:"Complete 25 workouts",            condition:s => s.totalWorkouts >= 25   },
-      { id:"all_types",     icon:"🎭", title:"All-Rounder",       desc:"Try every workout type",          condition:s => s.typesCompleted >= 5   },
-      { id:"bike5",         icon:"🚴", title:"Cyclist",           desc:"Complete 5 bike workouts",        condition:s => s.bikeWorkouts >= 5     },
-    ];
+const BOSSES = [
+  {id:"b1",name:"The Hollow Ache",  icon:"🌑",phase:1,xpReward:120,hp:80, maxHp:80, desc:"The heaviness of months past. Face it with breath.",weakness:"Mobility",dmgTypes:{Mobility:20,Strength:12,Cardio:10,Power:8,Agility:8}},
+  {id:"b2",name:"The Iron Sloth",   icon:"🦥",phase:2,xpReward:180,hp:120,maxHp:120,desc:"The comfort of stillness. Shatter it with strength.",weakness:"Strength",dmgTypes:{Strength:25,Agility:15,Cardio:12,Mobility:8,Power:8}},
+  {id:"b3",name:"The Fear Drake",   icon:"🐲",phase:3,xpReward:250,hp:160,maxHp:160,desc:"The dragon of doubt. Slay it with explosive power.",weakness:"Power",  dmgTypes:{Power:28,Agility:18,Strength:14,Mobility:8,Cardio:8}},
+  {id:"b4",name:"The Court Phantom",icon:"👻",phase:4,xpReward:350,hp:200,maxHp:200,desc:"The ghost of who you were. You've already surpassed her.",weakness:"All",dmgTypes:{Strength:20,Agility:20,Power:20,Mobility:20,Cardio:20}},
+];
 
-    const WEEKLY_QUESTS = [
-      { id:"q1", title:"Move Every Day",  desc:"Complete at least 3 workouts this week",   xpBonus:75, target:3, type:"workouts" },
-      { id:"q2", title:"Core & Restore",  desc:"Do 2 mobility + 1 strength session",       xpBonus:60, target:2, type:"mobility" },
-      { id:"q3", title:"Cardio Comeback", desc:"Hop on the bike twice this week",          xpBonus:50, target:2, type:"bike"     },
-    ];
+const PHASES = [
+  {id:1,name:"Foundation",weeks:"Weeks 1–4", color:C.sage,     xpNeeded:0},
+  {id:2,name:"Strength",  weeks:"Weeks 5–10",color:C.peach,    xpNeeded:600},
+  {id:3,name:"Power",     weeks:"Weeks 11–16",color:C.rose,    xpNeeded:1400},
+  {id:4,name:"Sport",     weeks:"Weeks 17+",  color:C.lavender,xpNeeded:2600},
+];
 
-    // ─── HELPERS ──────────────────────────────────────────────────────────────
+const WORKOUTS = [
+  {id:"p1_core",    phase:1,title:"Core Reconnect",       type:"Strength + Mobility",equipment:["Mat"],       duration:25,xp:50,statGains:{str:1,vit:2},
+   exercises:[
+    {name:"Diaphragmatic Breathing",     sets:"3",reps:"10 breaths",  note:"Inhale through nose, feel belly + ribs expand"},
+    {name:"Heel Slides",                 sets:"3",reps:"10 each side",note:"Keep lower back neutral, engage deep core"},
+    {name:"Glute Bridge",                sets:"3",reps:"12",          note:"Drive through heels, squeeze glutes at top"},
+    {name:"Bird-Dog",                    sets:"3",reps:"8 each side", note:"Slow and controlled, no spinal rotation"},
+    {name:"Cat-Cow",                     sets:"2",reps:"10 cycles",   note:"Move through full range, breathe with movement"},
+    {name:"Child's Pose Hold",           sets:"2",reps:"45 sec",      note:"Relax hips back, breathe into lower back"},
+   ]},
+  {id:"p1_mobility",phase:1,title:"Hip & Shoulder Flow",  type:"Mobility",           equipment:["Mat"],       duration:30,xp:45,statGains:{agi:1,vit:2,pwr:1},
+   exercises:[
+    {name:"World's Greatest Stretch",        sets:"2",reps:"5 each side",note:"Take your time through each position"},
+    {name:"90/90 Hip Rotations",             sets:"3",reps:"8 each side",note:"Sit tall, rotate from hip not spine"},
+    {name:"Thread the Needle",               sets:"2",reps:"8 each side",note:"Keep hips stacked, reach arm through"},
+    {name:"Doorframe Chest Opener",          sets:"3",reps:"30 sec",    note:"Great for undoing nursing/carrying posture"},
+    {name:"Half-Kneeling Hip Flexor Stretch",sets:"2",reps:"45 sec ea", note:"Tuck pelvis gently under"},
+    {name:"Ankle Circles + Calf Raises",     sets:"2",reps:"10 each",   note:"Wake up the lower chain"},
+   ]},
+  {id:"p1_bike",    phase:1,title:"Easy Cardio Reboot",   type:"Cardio",             equipment:["Bike"],      duration:20,xp:40,statGains:{end:2,vit:1},
+   exercises:[
+    {name:"Warm-Up Spin",     sets:"1",reps:"5 min", note:"Zone 1 — conversational pace, very easy"},
+    {name:"Steady State Ride",sets:"1",reps:"12 min",note:"Zone 2 — slight effort, still able to talk"},
+    {name:"Cool-Down Spin",   sets:"1",reps:"3 min", note:"Gradually reduce cadence"},
+   ]},
+  {id:"p2_lower",   phase:2,title:"Lower Body Power",     type:"Strength",           equipment:["Ball","Mat"],duration:35,xp:70,statGains:{str:2,agi:1,end:1},
+   exercises:[
+    {name:"Ball Wall Squat",                 sets:"4",reps:"12",         note:"Ball between wall and lower back, feet out"},
+    {name:"Single-Leg Glute Bridge",         sets:"3",reps:"10 each",    note:"Progress from two-leg version"},
+    {name:"Lateral Band Walk (wide stance)", sets:"3",reps:"15 steps ea",note:"Stay low, mimic defensive slide"},
+    {name:"Ball Hamstring Curl",             sets:"3",reps:"10",         note:"Hips up, roll ball in and out"},
+    {name:"Step-Back Lunge",                 sets:"3",reps:"10 each",    note:"Control descent, drive through front heel"},
+    {name:"Calf Raise on Step",              sets:"3",reps:"15",         note:"Single leg for more challenge"},
+   ]},
+  {id:"p2_upper",   phase:2,title:"Upper Body & Posture", type:"Strength",           equipment:["Ball","Mat"],duration:30,xp:65,statGains:{str:2,pwr:1},
+   exercises:[
+    {name:"Ball Push-Up",          sets:"3",reps:"8–10",   note:"Hands on ball for instability challenge"},
+    {name:"Ball Prone Y-T-W",      sets:"3",reps:"8 each", note:"Chest on ball, small precise movements"},
+    {name:"Pike Push-Up",          sets:"3",reps:"8",       note:"Targets shoulders for overhead sport demands"},
+    {name:"Tricep Dip (off chair)",sets:"3",reps:"10",      note:"Keep elbows close to body"},
+    {name:"Ball Chest Stretch",    sets:"2",reps:"45 sec",  note:"Drape back over ball, open chest"},
+    {name:"Neck & Trap Release",   sets:"2",reps:"30 sec",  note:"Side tilt, ear to shoulder"},
+   ]},
+  {id:"p2_agility", phase:2,title:"Footwork Fundamentals",type:"Agility + Cardio",  equipment:["Mat"],       duration:25,xp:60,statGains:{agi:3,end:1},
+   exercises:[
+    {name:"Lateral Shuffle (slow)",  sets:"4",reps:"30 sec",        note:"Soft knees, weight on balls of feet"},
+    {name:"Pivot Steps",             sets:"3",reps:"10 each side",  note:"Tennis pivot — outside foot plants"},
+    {name:"Tuck Step + Cross Step",  sets:"3",reps:"10 each",       note:"Basketball crossover footwork pattern"},
+    {name:"Forward/Back Hop",        sets:"3",reps:"20 sec",        note:"Small hops, land softly"},
+    {name:"Bike Intervals",          sets:"4",reps:"2 min on/1 off",note:"Push to Zone 3 on work intervals"},
+   ]},
+  {id:"p3_explosive",phase:3,title:"Explosive Lower Body",type:"Power",             equipment:["Mat"],       duration:35,xp:90,statGains:{pwr:3,agi:2,str:1},
+   exercises:[
+    {name:"Jump Squat (low height)",  sets:"4",reps:"8",            note:"Land softly — toes, ball, heel"},
+    {name:"Lateral Bound",            sets:"4",reps:"6 each side",  note:"Push off outside foot, stick landing 2 sec"},
+    {name:"Split Jump",               sets:"3",reps:"6 each",       note:"Power from back leg, land in lunge"},
+    {name:"Reactive Lateral Shuffle", sets:"4",reps:"5 dir changes",note:"Accelerate and decelerate with control"},
+    {name:"Ball Drop Squat",          sets:"3",reps:"10",           note:"Toss ball, drop into squat, catch"},
+    {name:"Single Leg Balance to Hop",sets:"3",reps:"5 each",       note:"Balance 2 sec, small hop, rebalance"},
+   ]},
+  {id:"p3_core",    phase:3,title:"Rotational Core",      type:"Power + Core",       equipment:["Ball","Mat"],duration:30,xp:85,statGains:{pwr:2,str:2,vit:1},
+   exercises:[
+    {name:"Ball Russian Twist",           sets:"4",reps:"12 each side",note:"Slow with control, rotate from thoracic spine"},
+    {name:"Pallof Press (isometric hold)",sets:"3",reps:"20 sec ea",   note:"Resist rotation — arms extended"},
+    {name:"Ball Rollout",                 sets:"3",reps:"10",           note:"Kneel on mat, roll ball out slowly"},
+    {name:"Plank to Rotation",            sets:"3",reps:"8 each side", note:"From plank, rotate hip toward ceiling"},
+    {name:"Dead Bug with Ball",           sets:"3",reps:"8 each side", note:"Squeeze ball between hands and knees"},
+   ]},
+];
 
-    function getCurrentPhase(xp) {
-      for (let i = PHASES.length - 1; i >= 0; i--) {
-        if (xp >= PHASES[i].xpNeeded) return PHASES[i];
-      }
-      return PHASES[0];
-    }
-    function getNextPhase(xp) {
-      const cur = getCurrentPhase(xp);
-      return PHASES.find(p => p.id === cur.id + 1) || null;
-    }
-    function getLevelProgress(xp) {
-      const cur = getCurrentPhase(xp);
-      const nxt = getNextPhase(xp);
-      if (!nxt) return 100;
-      return Math.min(100, Math.round(((xp - cur.xpNeeded) / (nxt.xpNeeded - cur.xpNeeded)) * 100));
-    }
+const ACHIEVEMENTS = [
+  {id:"first",  icon:"🌸",title:"First Petal",   desc:"Complete your first workout", condition:s=>s.totalWorkouts>=1},
+  {id:"streak3",icon:"🕯️",title:"Candlelit",     desc:"3-day streak",                condition:s=>s.streak>=3},
+  {id:"streak7",icon:"✨",title:"Starlit Week",  desc:"7-day streak",                condition:s=>s.streak>=7},
+  {id:"phase2", icon:"🎀",title:"Ribbon Earned", desc:"Reach Strength phase",        condition:s=>s.totalXP>=600},
+  {id:"phase3", icon:"🌹",title:"Rose of Power", desc:"Reach Power phase",           condition:s=>s.totalXP>=1400},
+  {id:"phase4", icon:"👑",title:"Queen Returned",desc:"Reach Sport phase",           condition:s=>s.totalXP>=2600},
+  {id:"w10",    icon:"💫",title:"Constellation", desc:"Complete 10 workouts",        condition:s=>s.totalWorkouts>=10},
+  {id:"boss1",  icon:"🌑",title:"Ache Slayer",   desc:"Defeat The Hollow Ache",      condition:s=>s.defeatedBosses.includes("b1")},
+  {id:"boss2",  icon:"🦥",title:"Sloth Slayer",  desc:"Defeat The Iron Sloth",       condition:s=>s.defeatedBosses.includes("b2")},
+];
 
-    const STORAGE_KEY = "comeback-coach-v1";
-    function loadState() {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        return raw ? JSON.parse(raw) : null;
-      } catch { return null; }
-    }
-    function saveState(state) {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); return true; }
-      catch { return false; }
-    }
+const WEEKLY_QUESTS = [
+  {id:"q1",title:"Bloom Every Day",desc:"Complete 3 workouts this week",xpBonus:75,target:3,type:"workouts"},
+  {id:"q2",title:"Soft & Strong",  desc:"Do 2 mobility sessions",       xpBonus:60,target:2,type:"mobility"},
+  {id:"q3",title:"Cardio Darling", desc:"Hop on the bike twice",        xpBonus:50,target:2,type:"bike"},
+];
 
-    // ─── STYLES ───────────────────────────────────────────────────────────────
+const statMeta = {
+  str:{label:"Strength",icon:"⚔️",color:"#e87070"},
+  agi:{label:"Agility", icon:"🏃",color:"#70c490"},
+  end:{label:"Endurance",icon:"🫀",color:"#70a8e8"},
+  pwr:{label:"Power",   icon:"⚡",color:"#c090e8"},
+  vit:{label:"Vitality",icon:"🌸",color:"#e8a0b0"},
+};
 
-    const modalOverlay = {
-      position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",
-      display:"flex",alignItems:"center",justifyContent:"center",
-      zIndex:100,padding:20,backdropFilter:"blur(4px)"
-    };
-    const modalBox = {
-      background:"#111827",border:"1px solid rgba(255,255,255,0.1)",
-      borderRadius:20,padding:"24px 22px",width:"100%",maxWidth:440,
-      maxHeight:"90vh",overflowY:"auto",position:"relative"
-    };
-    const closeBtn = {
-      position:"absolute",top:14,right:14,background:"rgba(255,255,255,0.08)",
-      border:"none",borderRadius:99,width:28,height:28,color:"#94a3b8",
-      cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"
-    };
-    const btnPrimary = {
-      padding:"12px 20px",borderRadius:10,border:"none",
-      fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:14,cursor:"pointer",transition:"all 0.2s"
-    };
-    const btnSecondary = { ...btnPrimary, background:"rgba(255,255,255,0.07)", color:"#94a3b8" };
+const STORAGE_KEY = "comeback-coach-rpg-v2";
+function load(){ try{const r=localStorage.getItem(STORAGE_KEY);return r?JSON.parse(r):null;}catch{return null;} }
+function save(s){ try{localStorage.setItem(STORAGE_KEY,JSON.stringify(s));return true;}catch{return false;} }
+function getPhase(xp){ for(let i=PHASES.length-1;i>=0;i--) if(xp>=PHASES[i].xpNeeded) return PHASES[i]; return PHASES[0]; }
+function getNextPhase(xp){ const c=getPhase(xp); return PHASES.find(p=>p.id===c.id+1)||null; }
+function getProgress(xp){ const c=getPhase(xp),n=getNextPhase(xp); if(!n) return 100; return Math.min(100,Math.round(((xp-c.xpNeeded)/(n.xpNeeded-c.xpNeeded))*100)); }
 
-    // ─── COMPONENTS ───────────────────────────────────────────────────────────
+// ── Avatar ──
+function Avatar({charClass,unlockedGear,size=110}){
+  const cls=CLASSES.find(c=>c.id===charClass)||CLASSES[0];
+  const gl=unlockedGear.length;
+  const glows=["transparent","rgba(157,191,160,0.3)","rgba(240,184,151,0.35)","rgba(212,116,138,0.4)","rgba(201,168,212,0.5)"];
+  const crowns=["","🌿","🎀","🌸","👑"];
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+      <div style={{width:size,height:size,borderRadius:"50%",
+        background:`radial-gradient(circle at 40% 35%,rgba(255,255,255,0.95),${cls.color}25)`,
+        border:`2px solid ${cls.color}70`,
+        boxShadow:`0 0 ${18+gl*8}px ${glows[gl]},0 4px 20px rgba(212,116,138,0.12)`,
+        display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+        fontSize:size*0.38,position:"relative",transition:"all 0.4s"}}>
+        <span>👩</span>
+        {gl>0&&<div style={{position:"absolute",top:-5,right:-2,fontSize:size*0.22,
+          animation:"sparkle 2.5s ease-in-out infinite"}}>{crowns[Math.min(gl,4)]}</div>}
+        <div style={{position:"absolute",bottom:2,fontSize:size*0.2,opacity:0.85}}>{cls.icon}</div>
+      </div>
+      <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic",fontSize:13,color:cls.color}}>{cls.name}</div>
+    </div>
+  );
+}
 
-    function XPBar({ xp }) {
-      const phase = getCurrentPhase(xp);
-      const next  = getNextPhase(xp);
-      const pct   = getLevelProgress(xp);
-      return (
-        <div style={{marginBottom:8}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-            <span style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,color:phase.color,letterSpacing:2}}>
-              {phase.name.toUpperCase()} PHASE
-            </span>
-            <span style={{fontFamily:"monospace",fontSize:12,color:"#94a3b8"}}>
-              {xp} XP {next ? `/ ${next.xpNeeded}` : "MAX"}
-            </span>
+// ── Stat Bar ──
+function StatBar({statKey,value}){
+  const m=statMeta[statKey],pct=Math.min(100,(value/50)*100);
+  return (
+    <div style={{marginBottom:9}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+        <span style={{fontSize:12,color:C.muted}}>{m.icon} {m.label}</span>
+        <span style={{fontSize:12,fontWeight:600,color:m.color}}>{value}</span>
+      </div>
+      <div style={{height:5,background:"rgba(180,130,130,0.12)",borderRadius:99,overflow:"hidden"}}>
+        <div style={{height:"100%",width:`${pct}%`,background:`linear-gradient(90deg,${m.color}70,${m.color})`,borderRadius:99,transition:"width 0.5s"}}/>
+      </div>
+    </div>
+  );
+}
+
+// ── Class Picker ──
+function ClassPicker({onSelect}){
+  const [hov,setHov]=useState(null);
+  return (
+    <div style={{minHeight:"100vh",background:`linear-gradient(160deg,#fdf0f3,#fdf6f0,#f5f0fd)`,
+      display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"30px 20px"}}>
+      <div style={{textAlign:"center",marginBottom:32}}>
+        <div style={{fontSize:32,marginBottom:8}}>✦</div>
+        <h1 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:40,fontWeight:600,color:C.text,lineHeight:1.1}}>
+          Choose Your Class
+        </h1>
+        <p style={{color:C.muted,fontSize:13,marginTop:10,maxWidth:300,margin:"10px auto 0",fontStyle:"italic"}}>
+          Each class shapes how your stats grow. This is where your story begins.
+        </p>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,maxWidth:480,width:"100%"}}>
+        {CLASSES.map(cls=>(
+          <div key={cls.id}
+            onMouseEnter={()=>setHov(cls.id)} onMouseLeave={()=>setHov(null)}
+            onClick={()=>onSelect(cls.id)}
+            style={{
+              background:hov===cls.id?`linear-gradient(135deg,${cls.color}18,${cls.color}08)`:"rgba(255,255,255,0.8)",
+              border:`1.5px solid ${hov===cls.id?cls.color+"70":"rgba(220,160,160,0.25)"}`,
+              borderRadius:20,padding:"20px 16px",cursor:"pointer",
+              transition:"all 0.25s",
+              transform:hov===cls.id?"translateY(-3px)":"none",
+              boxShadow:hov===cls.id?`0 10px 30px ${cls.color}20`:"0 2px 12px rgba(212,116,138,0.06)",
+            }}>
+            <div style={{fontSize:28,marginBottom:8}}>{cls.icon}</div>
+            <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:18,fontWeight:600,color:C.text}}>{cls.name}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:4,lineHeight:1.5,fontStyle:"italic"}}>{cls.desc}</div>
+            <div style={{marginTop:10,fontSize:10,color:cls.color,fontWeight:500,
+              background:`${cls.color}12`,borderRadius:99,padding:"3px 10px",display:"inline-block"}}>
+              {cls.passive.split(":")[0]}
+            </div>
           </div>
-          <div style={{height:8,background:"rgba(255,255,255,0.08)",borderRadius:99,overflow:"hidden"}}>
-            <div style={{height:"100%",width:`${pct}%`,background:`linear-gradient(90deg,${phase.color}99,${phase.color})`,
-              borderRadius:99,transition:"width 0.6s cubic-bezier(.4,0,.2,1)",boxShadow:`0 0 10px ${phase.color}80`}}/>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── XP Bar ──
+function XPBar({xp}){
+  const phase=getPhase(xp),next=getNextPhase(xp),pct=getProgress(xp);
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+        <span style={{fontSize:11,color:phase.color,letterSpacing:1,fontWeight:600,textTransform:"uppercase"}}>{phase.name}</span>
+        <span style={{fontSize:11,color:C.muted}}>{xp} xp{next?` / ${next.xpNeeded}`:""}</span>
+      </div>
+      <div style={{height:6,background:"rgba(180,130,130,0.15)",borderRadius:99,overflow:"hidden"}}>
+        <div style={{height:"100%",width:`${pct}%`,background:`linear-gradient(90deg,${C.blush},${C.rose})`,borderRadius:99,transition:"width 0.6s ease",boxShadow:`0 0 8px ${C.rose}40`}}/>
+      </div>
+    </div>
+  );
+}
+
+// ── Workout Card ──
+function WorkoutCard({workout,onStart,completed}){
+  const phase=PHASES.find(p=>p.id===workout.phase);
+  const [hov,setHov]=useState(false);
+  const typeIcon=workout.type.includes("Cardio")?"🚴":workout.type.includes("Mobility")?"🧘":workout.type.includes("Power")?"⚡":workout.type.includes("Agility")?"🏃":"💪";
+  return (
+    <div onClick={()=>onStart(workout)} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+      style={{background:completed?"rgba(255,235,235,0.7)":hov?"rgba(255,255,255,0.92)":"rgba(255,255,255,0.65)",
+        border:`1.5px solid ${completed?"rgba(212,116,138,0.35)":hov?"rgba(212,116,138,0.3)":"rgba(220,180,180,0.22)"}`,
+        borderRadius:16,padding:"14px 16px",cursor:"pointer",transition:"all 0.2s",
+        transform:hov?"translateY(-1px)":"none",
+        boxShadow:hov?"0 6px 20px rgba(212,116,138,0.1)":"0 2px 8px rgba(212,116,138,0.05)",
+        backdropFilter:"blur(6px)",position:"relative"}}>
+      {completed&&<div style={{position:"absolute",top:10,right:12,fontSize:13}}>🌸</div>}
+      <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+        <div style={{width:38,height:38,borderRadius:12,flexShrink:0,fontSize:18,
+          background:`${phase.color}18`,border:`1px solid ${phase.color}35`,
+          display:"flex",alignItems:"center",justifyContent:"center"}}>{typeIcon}</div>
+        <div style={{flex:1}}>
+          <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:17,fontWeight:600,color:C.text}}>{workout.title}</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:2}}>{workout.type} · {workout.duration} min</div>
+          <div style={{display:"flex",gap:5,marginTop:7,flexWrap:"wrap"}}>
+            {workout.equipment.map(e=>(
+              <span key={e} style={{fontSize:10,background:"rgba(255,255,255,0.8)",border:"1px solid rgba(220,180,180,0.25)",borderRadius:99,padding:"2px 8px",color:C.muted}}>
+                {e==="Bike"?"🚴":e==="Ball"?"⚽":"🧘"} {e}
+              </span>
+            ))}
+            <span style={{fontSize:10,background:`${C.rose}12`,border:`1px solid ${C.rose}25`,borderRadius:99,padding:"2px 8px",color:C.rose}}>+{workout.xp} xp</span>
+            {Object.entries(workout.statGains).map(([k,v])=>(
+              <span key={k} style={{fontSize:10,background:`${statMeta[k].color}10`,border:`1px solid ${statMeta[k].color}25`,borderRadius:99,padding:"2px 8px",color:statMeta[k].color}}>
+                {statMeta[k].icon}+{v}
+              </span>
+            ))}
           </div>
         </div>
-      );
-    }
+      </div>
+    </div>
+  );
+}
 
-    function WorkoutCard({ workout, onStart, completed }) {
-      const phase = PHASES.find(p => p.id === workout.phase);
-      const equipIcons = { Mat:"🧘", Ball:"⚽", Bike:"🚴" };
-      const typeIcon = workout.type.includes("Cardio") ? "🚴"
-        : workout.type.includes("Mobility") ? "🧘"
-        : workout.type.includes("Power") || workout.type.includes("Agility") ? "⚡" : "💪";
-      const [hov, setHov] = useState(false);
-      return (
-        <div onClick={() => onStart(workout)}
-          onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-          style={{background: hov ? "rgba(255,255,255,0.07)" : completed ? "rgba(74,222,128,0.06)" : "rgba(255,255,255,0.04)",
-            border:`1px solid ${completed ? "#4ade8030" : "rgba(255,255,255,0.08)"}`,
-            borderRadius:14,padding:"16px 18px",cursor:"pointer",transition:"all 0.2s",
-            position:"relative",overflow:"hidden",transform: hov ? "translateY(-1px)" : "none"}}>
-          {completed && <div style={{position:"absolute",top:10,right:12,fontSize:14}}>✅</div>}
-          <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
-            <div style={{width:40,height:40,borderRadius:10,flexShrink:0,
-              background:`${phase.color}18`,border:`1px solid ${phase.color}40`,
-              display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>
-              {typeIcon}
+// ── Modal shared styles ──
+const OV={position:"fixed",inset:0,background:"rgba(50,20,20,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20,backdropFilter:"blur(8px)"};
+const MB={background:"rgba(253,246,240,0.98)",border:"1px solid rgba(220,160,160,0.3)",borderRadius:22,padding:"24px 20px",width:"100%",maxWidth:440,maxHeight:"90vh",overflowY:"auto",position:"relative",boxShadow:"0 20px 60px rgba(212,116,138,0.12)"};
+const CB={position:"absolute",top:14,right:14,background:"rgba(220,160,160,0.12)",border:"1px solid rgba(220,160,160,0.2)",borderRadius:99,width:28,height:28,color:C.muted,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"};
+
+// ── Workout Modal ──
+function WorkoutModal({workout,onClose,onComplete}){
+  const [step,setStep]=useState(-1);
+  const [done,setDone]=useState(false);
+  if(done) return (
+    <div style={OV}><div style={{...MB,textAlign:"center",padding:"40px 28px"}}>
+      <div style={{fontSize:52,marginBottom:10}}>✨</div>
+      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.rose,fontStyle:"italic"}}>Beautifully Done</div>
+      <div style={{color:C.muted,margin:"8px 0 6px",fontSize:13}}>You earned <span style={{color:C.rose,fontWeight:600}}>+{workout.xp} xp</span></div>
+      <div style={{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap",marginBottom:20}}>
+        {Object.entries(workout.statGains).map(([k,v])=>(
+          <span key={k} style={{fontSize:12,background:`${statMeta[k].color}12`,color:statMeta[k].color,borderRadius:99,padding:"3px 10px",border:`1px solid ${statMeta[k].color}25`}}>
+            {statMeta[k].icon} +{v} {statMeta[k].label}
+          </span>
+        ))}
+      </div>
+      <button className="btn-primary" style={{width:"100%"}} onClick={()=>{onComplete(workout);onClose();}}>Collect & Return ✦</button>
+    </div></div>
+  );
+  if(step===-1) return (
+    <div style={OV}><div style={MB}>
+      <button onClick={onClose} style={CB}>✕</button>
+      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:24,color:C.text,marginBottom:4}}>{workout.title}</div>
+      <div style={{fontSize:12,color:C.muted,marginBottom:16}}>{workout.type} · {workout.duration} min · +{workout.xp} xp</div>
+      <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:20}}>
+        {workout.exercises.map((ex,i)=>(
+          <div key={i} style={{background:"rgba(255,245,242,0.8)",border:"1px solid rgba(220,180,180,0.18)",borderRadius:12,padding:"10px 14px"}}>
+            <div style={{display:"flex",justifyContent:"space-between"}}>
+              <span style={{fontSize:13,fontWeight:500,color:C.text}}>{ex.name}</span>
+              <span style={{fontSize:11,color:C.muted}}>{ex.sets}×{ex.reps}</span>
             </div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:17,letterSpacing:1,color:"#f1f5f9",lineHeight:1}}>{workout.title}</div>
-              <div style={{fontSize:11,color:"#64748b",marginTop:3}}>{workout.type} · {workout.duration} min</div>
-              <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap"}}>
-                {workout.equipment.map(e => (
-                  <span key={e} style={{fontSize:10,background:"rgba(255,255,255,0.06)",borderRadius:99,padding:"2px 8px",color:"#94a3b8"}}>
-                    {equipIcons[e]} {e}
-                  </span>
+            <div style={{fontSize:11,color:C.muted,marginTop:2,fontStyle:"italic"}}>{ex.note}</div>
+          </div>
+        ))}
+      </div>
+      <button className="btn-primary" style={{width:"100%"}} onClick={()=>setStep(0)}>Begin ✦</button>
+    </div></div>
+  );
+  const ex=workout.exercises[step];
+  return (
+    <div style={OV}><div style={{...MB,textAlign:"center"}}>
+      <button onClick={onClose} style={CB}>✕</button>
+      <div style={{fontSize:11,color:C.muted,letterSpacing:2,marginBottom:6,textTransform:"uppercase"}}>{step+1} of {workout.exercises.length}</div>
+      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,color:C.text,fontStyle:"italic",lineHeight:1.2}}>{ex.name}</div>
+      <div style={{background:"linear-gradient(135deg,rgba(255,235,235,0.8),rgba(255,245,240,0.8))",border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",margin:"14px 0"}}>
+        <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.rose}}>{ex.sets} sets × {ex.reps}</div>
+        <div style={{fontSize:12,color:C.muted,marginTop:5,fontStyle:"italic"}}>{ex.note}</div>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        {step>0&&<button className="btn-soft" style={{flex:1}} onClick={()=>setStep(s=>s-1)}>← Back</button>}
+        <button className="btn-primary" style={{flex:2}} onClick={()=>step<workout.exercises.length-1?setStep(s=>s+1):setDone(true)}>
+          {step<workout.exercises.length-1?"Next ✦":"Finish ✨"}
+        </button>
+      </div>
+      <div style={{display:"flex",justifyContent:"center",gap:5,marginTop:14}}>
+        {workout.exercises.map((_,i)=>(
+          <div key={i} style={{width:i===step?16:5,height:5,borderRadius:99,background:i<=step?C.rose:"rgba(212,116,138,0.18)",transition:"all 0.3s"}}/>
+        ))}
+      </div>
+    </div></div>
+  );
+}
+
+// ── Boss Modal ──
+function BossModal({boss,onClose,onDefeat}){
+  const [hp,setHp]=useState(boss.hp);
+  const [log,setLog]=useState([]);
+  const [won,setWon]=useState(false);
+  function attack(type){
+    const dmg=Math.max(1,(boss.dmgTypes[type]||8)+Math.floor(Math.random()*6));
+    const newHp=Math.max(0,hp-dmg);
+    setHp(newHp);
+    setLog(prev=>[`${type} strike — ${dmg} damage!`,...prev.slice(0,3)]);
+    if(newHp<=0) setWon(true);
+  }
+  const hpPct=(hp/boss.maxHp)*100;
+  if(won) return (
+    <div style={OV}><div style={{...MB,textAlign:"center",padding:"36px 28px"}}>
+      <div style={{fontSize:52,marginBottom:8}}>🎉</div>
+      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,color:C.rose,fontStyle:"italic"}}>Victory, Darling!</div>
+      <div style={{color:C.muted,fontSize:13,margin:"8px 0 20px"}}>{boss.name} has been defeated.</div>
+      <div style={{background:"rgba(255,235,235,0.8)",border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:20}}>
+        <div style={{fontSize:14,color:C.rose,fontWeight:600}}>+{boss.xpReward} XP earned ✦</div>
+      </div>
+      <button className="btn-primary" style={{width:"100%"}} onClick={()=>{onDefeat(boss);onClose();}}>Claim Victory ✦</button>
+    </div></div>
+  );
+  return (
+    <div style={OV}><div style={MB}>
+      <button onClick={onClose} style={CB}>✕</button>
+      <div style={{textAlign:"center",marginBottom:14}}>
+        <div style={{fontSize:44,marginBottom:4}}>{boss.icon}</div>
+        <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text}}>{boss.name}</div>
+        <div style={{fontSize:11,color:C.muted,fontStyle:"italic",marginTop:3}}>{boss.desc}</div>
+      </div>
+      <div style={{marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+          <span style={{fontSize:11,color:C.muted}}>Boss HP</span>
+          <span style={{fontSize:11,color:C.rose}}>{hp} / {boss.maxHp}</span>
+        </div>
+        <div style={{height:10,background:"rgba(180,130,130,0.12)",borderRadius:99,overflow:"hidden"}}>
+          <div style={{height:"100%",width:`${hpPct}%`,background:`linear-gradient(90deg,${C.rose},${C.blush})`,borderRadius:99,transition:"width 0.4s"}}/>
+        </div>
+        <div style={{fontSize:10,color:C.rose,marginTop:4}}>⚠ Weakness: {boss.weakness}</div>
+      </div>
+      <div style={{fontSize:12,color:C.muted,marginBottom:8,textAlign:"center",fontStyle:"italic"}}>Choose your attack:</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:14}}>
+        {["Mobility","Strength","Cardio","Agility","Power"].map(t=>(
+          <button key={t} onClick={()=>attack(t)} style={{
+            background:t===boss.weakness?"linear-gradient(135deg,#e8a0a0,#d4748a)":"rgba(255,255,255,0.8)",
+            color:t===boss.weakness?"#fff":C.muted,
+            border:`1px solid ${t===boss.weakness?C.rose:"rgba(220,160,160,0.25)"}`,
+            borderRadius:10,padding:"8px 4px",fontSize:11,cursor:"pointer",fontFamily:"'Jost',sans-serif",
+            boxShadow:t===boss.weakness?"0 3px 12px rgba(212,116,138,0.25)":"none",
+          }}>
+            {t==="Mobility"?"🧘":t==="Strength"?"💪":t==="Cardio"?"🚴":t==="Agility"?"🏃":"⚡"} {t}
+          </button>
+        ))}
+      </div>
+      {log.length>0&&(
+        <div style={{background:"rgba(255,245,242,0.8)",borderRadius:12,padding:"8px 12px"}}>
+          {log.map((l,i)=><div key={i} style={{fontSize:11,color:i===0?C.rose:C.muted,marginBottom:i<log.length-1?3:0}}>{l}</div>)}
+        </div>
+      )}
+    </div></div>
+  );
+}
+
+// ══════════════════════════════════════════════════════
+//  MAIN APP
+// ══════════════════════════════════════════════════════
+function App(){
+  const saved=load();
+  const [charClass,    setCharClass]    =useState(saved?.charClass||null);
+  const [xp,           setXp]           =useState(saved?.xp||0);
+  const [completedIds, setCompletedIds] =useState(saved?.completedIds||[]);
+  const [streak,       setStreak]       =useState(saved?.streak||0);
+  const [totalWorkouts,setTotalWorkouts]=useState(saved?.totalWorkouts||0);
+  const [achievements, setAchievements] =useState(saved?.achievements||[]);
+  const [questProgress,setQuestProgress]=useState(saved?.questProgress||{workouts:0,mobility:0,bike:0});
+  const [defeatedBosses,setDefeatedBosses]=useState(saved?.defeatedBosses||[]);
+  const [unlockedGear, setUnlockedGear] =useState(saved?.unlockedGear||[]);
+  const [abilityPts,   setAbilityPts]   =useState(saved?.abilityPts||0);
+  const [learnedSkills,setLearnedSkills]=useState(saved?.learnedSkills||[]);
+  const [charStats,    setCharStats]    =useState(saved?.charStats||{str:1,agi:1,end:1,pwr:1,vit:1});
+  const [tab,          setTab]          =useState("home");
+  const [activeWorkout,setActiveWorkout]=useState(null);
+  const [activeBoss,   setActiveBoss]   =useState(null);
+  const [justEarned,   setJustEarned]   =useState(null);
+  const [filter,       setFilter]       =useState("All");
+  const [saveStatus,   setSaveStatus]   =useState(null);
+
+  const phase=getPhase(xp);
+  const cls=CLASSES.find(c=>c.id===charClass)||CLASSES[0];
+  const stats={totalXP:xp,streak,totalWorkouts,defeatedBosses,unlockedGear};
+
+  useEffect(()=>{
+    if(!charClass) return;
+    const ok=save({charClass,xp,completedIds,streak,totalWorkouts,achievements,questProgress,defeatedBosses,unlockedGear,abilityPts,learnedSkills,charStats});
+    setSaveStatus(ok?"saved":"error");
+    const t=setTimeout(()=>setSaveStatus(null),2000);
+    return()=>clearTimeout(t);
+  },[charClass,xp,completedIds,streak,totalWorkouts,achievements,questProgress,defeatedBosses,unlockedGear,abilityPts,learnedSkills,charStats]);
+
+  useEffect(()=>{
+    if(!charClass) return;
+    ACHIEVEMENTS.forEach(a=>{
+      if(!achievements.includes(a.id)&&a.condition(stats)){
+        setAchievements(prev=>[...prev,a.id]);
+        setJustEarned(a);setTimeout(()=>setJustEarned(null),3500);
+      }
+    });
+  },[xp,streak,totalWorkouts,defeatedBosses,unlockedGear]);
+
+  useEffect(()=>{
+    GEAR_UNLOCKS.forEach(g=>{
+      if(!unlockedGear.includes(g.phase)&&xp>=PHASES.find(p=>p.id===g.phase)?.xpNeeded){
+        setUnlockedGear(prev=>[...prev,g.phase]);
+      }
+    });
+  },[xp]);
+
+  function handleComplete(workout){
+    if(completedIds.includes(workout.id)) return;
+    const gains={...workout.statGains};
+    if(gains[cls.bonusStat]) gains[cls.bonusStat]+=2;
+    setXp(v=>v+workout.xp);
+    setCompletedIds(prev=>[...prev,workout.id]);
+    setStreak(v=>v+1);
+    setTotalWorkouts(v=>v+1);
+    setCharStats(prev=>{const n={...prev};Object.entries(gains).forEach(([k,v])=>{n[k]=(n[k]||0)+v;});return n;});
+    if((totalWorkouts+1)%3===0) setAbilityPts(v=>v+1);
+    setQuestProgress(prev=>({
+      workouts:prev.workouts+1,
+      mobility:prev.mobility+(workout.type.includes("Mobility")?1:0),
+      bike:prev.bike+(workout.equipment.includes("Bike")?1:0),
+    }));
+  }
+
+  function handleBossDefeat(boss){
+    setDefeatedBosses(prev=>[...prev,boss.id]);
+    setXp(v=>v+boss.xpReward);
+  }
+
+  function learnSkill(name){
+    const sk=SKILLS_DATA[name];
+    if(!sk||abilityPts<sk.cost||learnedSkills.includes(name)) return;
+    setAbilityPts(v=>v-sk.cost);
+    setLearnedSkills(prev=>[...prev,name]);
+    if(sk.stat!=="xp") setCharStats(prev=>({...prev,[sk.stat]:(prev[sk.stat]||0)+sk.bonus}));
+  }
+
+  if(!charClass) return <ClassPicker onSelect={setCharClass}/>;
+
+  const filterOpts=["All","Phase 1","Phase 2","Phase 3","Mobility","Strength","Cardio"];
+  const visible=WORKOUTS.filter(w=>{
+    if(filter==="All") return true;
+    if(filter==="Phase 1") return w.phase===1;
+    if(filter==="Phase 2") return w.phase===2;
+    if(filter==="Phase 3") return w.phase===3;
+    if(filter==="Mobility") return w.type.includes("Mobility");
+    if(filter==="Strength") return w.type.includes("Strength");
+    if(filter==="Cardio") return w.type.includes("Cardio");
+    return true;
+  });
+
+  const nextBoss=BOSSES.find(b=>!defeatedBosses.includes(b.id))||null;
+
+  return (
+    <div style={{minHeight:"100vh",background:`linear-gradient(160deg,#fdf0f3 0%,#fdf6f0 50%,#f5f0fd 100%)`,paddingBottom:90}}>
+
+      {justEarned&&(
+        <div style={{position:"fixed",top:14,left:"50%",transform:"translateX(-50%)",
+          background:"rgba(255,255,255,0.96)",border:`1px solid ${C.rose}35`,borderRadius:16,
+          padding:"12px 20px",zIndex:999,display:"flex",alignItems:"center",gap:12,
+          boxShadow:"0 8px 32px rgba(212,116,138,0.18)",animation:"slideDown 0.3s ease",minWidth:260,backdropFilter:"blur(10px)"}}>
+          <span style={{fontSize:24}}>{justEarned.icon}</span>
+          <div>
+            <div style={{fontSize:10,color:C.rose,letterSpacing:2,fontWeight:600,textTransform:"uppercase"}}>Achievement ✦</div>
+            <div style={{fontSize:14,fontWeight:600,color:C.text}}>{justEarned.title}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+      <div style={{background:"rgba(253,246,240,0.88)",borderBottom:`1px solid ${C.border}`,
+        padding:"16px 20px 12px",position:"sticky",top:0,zIndex:10,backdropFilter:"blur(16px)"}}>
+        <div style={{maxWidth:480,margin:"0 auto"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic",fontSize:22,color:C.rose,letterSpacing:0.5}}>
+                Comeback Coach ✦
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <div style={{fontSize:10,color:C.muted}}>postpartum · strength · sport</div>
+                {saveStatus==="saved"&&<div style={{fontSize:10,color:C.sage}}>✓ saved</div>}
+              </div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:20,fontWeight:600,color:C.text,lineHeight:1}}>{streak}</div>
+                <div style={{fontSize:9,color:"#f97316"}}>🔥 streak</div>
+              </div>
+              <div style={{width:40,height:40,borderRadius:"50%",
+                background:`radial-gradient(circle,${cls.color}25,${cls.color}08)`,
+                border:`1.5px solid ${cls.color}50`,
+                display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>{cls.icon}</div>
+            </div>
+          </div>
+          <XPBar xp={xp}/>
+        </div>
+      </div>
+
+      <div style={{maxWidth:480,margin:"0 auto",padding:"0 20px"}}>
+        {/* Tabs */}
+        <div style={{display:"flex",gap:3,background:"rgba(255,255,255,0.55)",
+          borderRadius:14,padding:4,margin:"14px 0",border:`1px solid ${C.border}`}}>
+          {[["home","✦ Home"],["train","Train"],["character","Hero"],["quests","Quests"]].map(([id,label])=>(
+            <button key={id} onClick={()=>setTab(id)} style={{
+              flex:1,padding:"8px 4px",border:"none",borderRadius:10,cursor:"pointer",
+              background:tab===id?"linear-gradient(135deg,#e8a0a0,#d4748a)":"transparent",
+              color:tab===id?"#fff":C.muted,
+              fontFamily:"'Jost',sans-serif",fontWeight:500,fontSize:11,transition:"all 0.2s",
+              boxShadow:tab===id?"0 2px 8px rgba(212,116,138,0.28)":"none",
+            }}>{label}</button>
+          ))}
+        </div>
+
+        {/* HOME */}
+        {tab==="home"&&(
+          <div>
+            <div className="card" style={{padding:"24px 20px",textAlign:"center",marginBottom:14}}>
+              <Avatar charClass={charClass} unlockedGear={unlockedGear} size={110}/>
+              <div style={{marginTop:14,display:"flex",justifyContent:"center",gap:6,flexWrap:"wrap"}}>
+                {Object.entries(charStats).map(([k,v])=>(
+                  <div key={k} style={{background:`${statMeta[k].color}10`,border:`1px solid ${statMeta[k].color}25`,borderRadius:99,padding:"3px 10px",fontSize:11,color:statMeta[k].color,fontWeight:500}}>
+                    {statMeta[k].icon} {v}
+                  </div>
                 ))}
-                <span style={{fontSize:10,background:`${phase.color}18`,borderRadius:99,padding:"2px 8px",color:phase.color}}>
-                  +{workout.xp} XP
-                </span>
               </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    function WorkoutModal({ workout, onClose, onComplete }) {
-      const [step, setStep] = useState(-1);
-      const [done, setDone] = useState(false);
-      const phase = PHASES.find(p => p.id === workout.phase);
-
-      if (done) return (
-        <div style={modalOverlay}>
-          <div style={{...modalBox,textAlign:"center",padding:"40px 30px"}}>
-            <div style={{fontSize:60,marginBottom:12}}>🎉</div>
-            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:32,color:phase.color,letterSpacing:2}}>Workout Complete!</div>
-            <div style={{color:"#94a3b8",margin:"10px 0 24px"}}>
-              You earned <span style={{color:phase.color,fontWeight:700}}>+{workout.xp} XP</span>
-            </div>
-            <button onClick={() => { onComplete(workout); onClose(); }}
-              style={{...btnPrimary,background:phase.color,color:"#0f172a",width:"100%"}}>
-              Collect XP & Close
-            </button>
-          </div>
-        </div>
-      );
-
-      if (step === -1) return (
-        <div style={modalOverlay}>
-          <div style={modalBox}>
-            <button onClick={onClose} style={closeBtn}>✕</button>
-            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:26,letterSpacing:2,color:phase.color}}>{workout.title}</div>
-            <div style={{color:"#64748b",fontSize:12,marginBottom:18}}>{workout.type} · {workout.duration} min · +{workout.xp} XP</div>
-            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:22}}>
-              {workout.exercises.map((ex, i) => (
-                <div key={i} style={{background:"rgba(255,255,255,0.04)",borderRadius:10,padding:"10px 14px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between"}}>
-                    <span style={{color:"#f1f5f9",fontSize:14,fontWeight:500}}>{ex.name}</span>
-                    <span style={{color:"#64748b",fontSize:12}}>{ex.sets} × {ex.reps}</span>
-                  </div>
-                  <div style={{color:"#475569",fontSize:11,marginTop:2}}>{ex.note}</div>
+              {abilityPts>0&&(
+                <div onClick={()=>setTab("character")} style={{marginTop:10,background:`${C.lavender}18`,border:`1px solid ${C.lavender}35`,borderRadius:99,display:"inline-block",padding:"4px 14px",fontSize:11,color:C.lavender,cursor:"pointer"}}>
+                  ✨ {abilityPts} ability point{abilityPts>1?"s":""} to spend →
                 </div>
-              ))}
-            </div>
-            <button onClick={() => setStep(0)} style={{...btnPrimary,background:phase.color,color:"#0f172a",width:"100%"}}>
-              Start Workout →
-            </button>
-          </div>
-        </div>
-      );
-
-      const ex = workout.exercises[step];
-      return (
-        <div style={modalOverlay}>
-          <div style={{...modalBox,textAlign:"center"}}>
-            <button onClick={onClose} style={closeBtn}>✕</button>
-            <div style={{color:"#475569",fontSize:11,marginBottom:6,letterSpacing:1}}>
-              EXERCISE {step+1} OF {workout.exercises.length}
-            </div>
-            <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:30,color:phase.color,letterSpacing:2,lineHeight:1.1}}>{ex.name}</div>
-            <div style={{background:`${phase.color}15`,border:`1px solid ${phase.color}30`,
-              borderRadius:12,padding:"16px 20px",margin:"16px 0"}}>
-              <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:22,color:"#f1f5f9",letterSpacing:1}}>
-                {ex.sets} sets × {ex.reps}
-              </div>
-              <div style={{color:"#94a3b8",fontSize:13,marginTop:6}}>{ex.note}</div>
-            </div>
-            <div style={{display:"flex",gap:10}}>
-              {step > 0 && <button onClick={() => setStep(s=>s-1)} style={{...btnSecondary,flex:1}}>← Back</button>}
-              <button onClick={() => step < workout.exercises.length-1 ? setStep(s=>s+1) : setDone(true)}
-                style={{...btnPrimary,background:phase.color,color:"#0f172a",flex:2}}>
-                {step < workout.exercises.length-1 ? "Next Exercise →" : "Finish! 🎉"}
-              </button>
-            </div>
-            <div style={{display:"flex",justifyContent:"center",gap:5,marginTop:16}}>
-              {workout.exercises.map((_,i) => (
-                <div key={i} style={{width:i===step?18:6,height:6,borderRadius:99,
-                  background:i<=step?phase.color:"rgba(255,255,255,0.12)",transition:"all 0.3s"}}/>
-              ))}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // ─── MAIN APP ─────────────────────────────────────────────────────────────
-
-    function App() {
-      const saved = loadState();
-      const [xp,             setXp]             = useState(saved?.xp ?? 0);
-      const [completedIds,   setCompletedIds]   = useState(saved?.completedIds ?? []);
-      const [streak,         setStreak]         = useState(saved?.streak ?? 0);
-      const [totalWorkouts,  setTotalWorkouts]  = useState(saved?.totalWorkouts ?? 0);
-      const [bikeWorkouts,   setBikeWorkouts]   = useState(saved?.bikeWorkouts ?? 0);
-      const [typesCompleted, setTypesCompleted] = useState(new Set(saved?.typesCompleted ?? []));
-      const [achievements,   setAchievements]   = useState(saved?.achievements ?? []);
-      const [questProgress,  setQuestProgress]  = useState(saved?.questProgress ?? { workouts:0,mobility:0,bike:0 });
-      const [activeWorkout,  setActiveWorkout]  = useState(null);
-      const [tab,            setTab]            = useState("train");
-      const [justEarned,     setJustEarned]     = useState(null);
-      const [filter,         setFilter]         = useState("All");
-      const [saveStatus,     setSaveStatus]     = useState(null);
-
-      const phase = getCurrentPhase(xp);
-
-      const stats = { totalXP:xp, streak, totalWorkouts, bikeWorkouts, typesCompleted:typesCompleted.size };
-
-      // Persist on every change
-      useEffect(() => {
-        const ok = saveState({ xp, completedIds, streak, totalWorkouts, bikeWorkouts,
-          typesCompleted:[...typesCompleted], achievements, questProgress });
-        setSaveStatus(ok ? "saved" : "error");
-        const t = setTimeout(() => setSaveStatus(null), 2000);
-        return () => clearTimeout(t);
-      }, [xp, completedIds, streak, totalWorkouts, bikeWorkouts, typesCompleted, achievements, questProgress]);
-
-      // Achievement checks
-      useEffect(() => {
-        ACHIEVEMENTS.forEach(a => {
-          if (!achievements.includes(a.id) && a.condition(stats)) {
-            setAchievements(prev => [...prev, a.id]);
-            setJustEarned(a);
-            setTimeout(() => setJustEarned(null), 3500);
-          }
-        });
-      }, [xp, streak, totalWorkouts, bikeWorkouts, typesCompleted]);
-
-      function handleComplete(workout) {
-        if (completedIds.includes(workout.id)) return;
-        setXp(v => v + workout.xp);
-        setCompletedIds(prev => [...prev, workout.id]);
-        setStreak(v => v + 1);
-        setTotalWorkouts(v => v + 1);
-        if (workout.equipment.includes("Bike")) setBikeWorkouts(v => v + 1);
-        setTypesCompleted(prev => new Set([...prev, workout.type.split(" ")[0]]));
-        setQuestProgress(prev => ({
-          workouts: prev.workouts + 1,
-          mobility: prev.mobility + (workout.type.includes("Mobility") ? 1 : 0),
-          bike:     prev.bike     + (workout.equipment.includes("Bike") ? 1 : 0),
-        }));
-      }
-
-      const filterOptions = ["All","Phase 1","Phase 2","Phase 3","Mobility","Strength","Cardio"];
-      const visible = WORKOUTS.filter(w => {
-        if (filter === "All")      return true;
-        if (filter === "Phase 1")  return w.phase === 1;
-        if (filter === "Phase 2")  return w.phase === 2;
-        if (filter === "Phase 3")  return w.phase === 3;
-        if (filter === "Mobility") return w.type.includes("Mobility");
-        if (filter === "Strength") return w.type.includes("Strength");
-        if (filter === "Cardio")   return w.type.includes("Cardio");
-        return true;
-      });
-
-      return (
-        <div style={{minHeight:"100vh",background:"#0a0f1a",paddingBottom:80}}>
-
-          {/* Achievement toast */}
-          {justEarned && (
-            <div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",
-              background:"#1e293b",border:`1px solid ${phase.color}50`,borderRadius:14,
-              padding:"12px 20px",zIndex:999,display:"flex",alignItems:"center",gap:12,
-              boxShadow:`0 0 30px ${phase.color}30`,animation:"slideDown 0.3s ease",minWidth:260}}>
-              <span style={{fontSize:24}}>{justEarned.icon}</span>
-              <div>
-                <div style={{fontSize:11,color:phase.color,letterSpacing:1,fontWeight:600}}>ACHIEVEMENT UNLOCKED</div>
-                <div style={{fontSize:14,fontWeight:600}}>{justEarned.title}</div>
-              </div>
-            </div>
-          )}
-
-          {/* Header */}
-          <div style={{background:"linear-gradient(180deg,#0f1c2e 0%,#0a0f1a 100%)",
-            borderBottom:"1px solid rgba(255,255,255,0.06)",padding:"20px 20px 16px",
-            position:"sticky",top:0,zIndex:10}}>
-            <div style={{maxWidth:480,margin:"0 auto"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                <div>
-                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:22,letterSpacing:3,color:phase.color}}>
-                    COMEBACK COACH
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <div style={{fontSize:11,color:"#475569"}}>Postpartum Strength & Sport</div>
-                    {saveStatus==="saved" && <div style={{fontSize:10,color:"#4ade80"}}>✓ saved</div>}
-                    {saveStatus==="error" && <div style={{fontSize:10,color:"#f87171"}}>⚠ save failed</div>}
-                  </div>
-                </div>
-                <div style={{textAlign:"right"}}>
-                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:28,color:"#f1f5f9",lineHeight:1}}>{streak}</div>
-                  <div style={{fontSize:10,color:"#f97316"}}>🔥 DAY STREAK</div>
-                </div>
-              </div>
-              <XPBar xp={xp}/>
-            </div>
-          </div>
-
-          {/* Body */}
-          <div style={{maxWidth:480,margin:"0 auto",padding:"0 20px"}}>
-            {/* Tabs */}
-            <div style={{display:"flex",gap:4,background:"rgba(255,255,255,0.04)",borderRadius:12,padding:4,margin:"16px 0"}}>
-              {[["train","🏋️ Train"],["progress","📊 Progress"],["quests","🎯 Quests"]].map(([id,label]) => (
-                <button key={id} onClick={() => setTab(id)} style={{
-                  flex:1,padding:"8px 4px",border:"none",borderRadius:9,cursor:"pointer",
-                  background:tab===id ? phase.color : "transparent",
-                  color:tab===id ? "#0f172a" : "#64748b",
-                  fontFamily:"'DM Sans',sans-serif",fontWeight:600,fontSize:12,transition:"all 0.2s"
-                }}>{label}</button>
-              ))}
+              )}
             </div>
 
-            {/* ── TRAIN ── */}
-            {tab==="train" && (
-              <div>
-                <div style={{display:"flex",gap:6,marginBottom:18,overflowX:"auto",paddingBottom:4}}>
-                  {PHASES.map(p => {
-                    const unlocked = xp >= p.xpNeeded;
-                    return (
-                      <div key={p.id} style={{flex:"0 0 auto",
-                        background:unlocked ? `${p.color}15` : "rgba(255,255,255,0.03)",
-                        border:`1px solid ${unlocked ? p.color+"50" : "rgba(255,255,255,0.06)"}`,
-                        borderRadius:10,padding:"8px 12px",minWidth:100,opacity:unlocked?1:0.5}}>
-                        <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,color:unlocked?p.color:"#475569",letterSpacing:1}}>
-                          {unlocked ? "✓ " : "🔒 "}{p.name}
-                        </div>
-                        <div style={{fontSize:9,color:"#475569",marginTop:1}}>{p.weeks}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:8,marginBottom:14}}>
-                  {filterOptions.map(f => (
-                    <button key={f} onClick={() => setFilter(f)} style={{
-                      flex:"0 0 auto",padding:"5px 12px",borderRadius:99,
-                      border:`1px solid ${filter===f ? phase.color : "rgba(255,255,255,0.1)"}`,
-                      background:filter===f ? `${phase.color}20` : "transparent",
-                      color:filter===f ? phase.color : "#64748b",
-                      fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"
-                    }}>{f}</button>
-                  ))}
-                </div>
-                <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                  {visible.map(w => <WorkoutCard key={w.id} workout={w} onStart={setActiveWorkout} completed={completedIds.includes(w.id)}/>)}
-                </div>
-              </div>
-            )}
-
-            {/* ── PROGRESS ── */}
-            {tab==="progress" && (
-              <div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:18}}>
-                  {[
-                    {label:"Total XP",       value:xp,           icon:"⭐",color:"#facc15"},
-                    {label:"Workouts Done",  value:totalWorkouts, icon:"✅",color:"#4ade80"},
-                    {label:"Day Streak",     value:streak,        icon:"🔥",color:"#f97316"},
-                    {label:"Phase",          value:phase.name,    icon:"📍",color:phase.color},
-                  ].map(s => (
-                    <div key={s.label} style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:14,padding:"14px 16px"}}>
-                      <div style={{fontSize:20}}>{s.icon}</div>
-                      <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:26,color:s.color,lineHeight:1.1,marginTop:4}}>{s.value}</div>
-                      <div style={{fontSize:11,color:"#475569"}}>{s.label}</div>
+            {nextBoss&&(
+              <div className="card-pink" style={{padding:"16px",marginBottom:14}}>
+                <div style={{fontSize:10,color:C.rose,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>⚔️ Active Quest</div>
+                <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                  <div style={{fontSize:36}}>{nextBoss.icon}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:18,color:C.text}}>{nextBoss.name}</div>
+                    <div style={{fontSize:11,color:C.muted,marginTop:2,fontStyle:"italic"}}>{nextBoss.desc}</div>
+                    <div style={{height:4,background:"rgba(212,116,138,0.12)",borderRadius:99,marginTop:8,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:`${(nextBoss.hp/nextBoss.maxHp)*100}%`,background:`linear-gradient(90deg,${C.blush},${C.rose})`,borderRadius:99}}/>
                     </div>
-                  ))}
+                  </div>
                 </div>
-                <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,letterSpacing:2,color:"#475569",marginBottom:12}}>ACHIEVEMENTS</div>
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {ACHIEVEMENTS.map(a => {
-                    const earned = achievements.includes(a.id);
-                    return (
-                      <div key={a.id} style={{display:"flex",gap:12,alignItems:"center",
-                        background:earned?"rgba(74,222,128,0.06)":"rgba(255,255,255,0.03)",
-                        border:`1px solid ${earned?"#4ade8030":"rgba(255,255,255,0.06)"}`,
-                        borderRadius:12,padding:"10px 14px",opacity:earned?1:0.45}}>
-                        <span style={{fontSize:22,filter:earned?"none":"grayscale(1)"}}>{a.icon}</span>
-                        <div>
-                          <div style={{fontSize:13,fontWeight:600,color:earned?"#f1f5f9":"#475569"}}>{a.title}</div>
-                          <div style={{fontSize:11,color:"#475569"}}>{a.desc}</div>
-                        </div>
-                        {earned && <span style={{marginLeft:"auto",fontSize:12,color:"#4ade80"}}>✓</span>}
-                      </div>
-                    );
-                  })}
-                </div>
+                <button className="btn-primary" style={{width:"100%",marginTop:12}} onClick={()=>setActiveBoss(nextBoss)}>⚔️ Challenge Boss</button>
               </div>
             )}
 
-            {/* ── QUESTS ── */}
-            {tab==="quests" && (
-              <div>
-                <div style={{background:`${phase.color}12`,border:`1px solid ${phase.color}30`,borderRadius:14,padding:"14px 16px",marginBottom:18}}>
-                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:13,color:phase.color,letterSpacing:2}}>THIS WEEK'S QUESTS</div>
-                  <div style={{fontSize:11,color:"#475569",marginTop:2}}>Complete quests for bonus XP</div>
-                </div>
-                <div style={{display:"flex",flexDirection:"column",gap:12}}>
-                  {WEEKLY_QUESTS.map(q => {
-                    const cur  = questProgress[q.type] || 0;
-                    const done = cur >= q.target;
-                    const pct  = Math.min(100,(cur/q.target)*100);
-                    return (
-                      <div key={q.id} style={{background:done?"rgba(74,222,128,0.06)":"rgba(255,255,255,0.04)",
-                        border:`1px solid ${done?"#4ade8030":"rgba(255,255,255,0.08)"}`,borderRadius:14,padding:"16px 18px"}}>
-                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-                          <div>
-                            <div style={{fontWeight:600,fontSize:14}}>{done?"✅ ":""}{q.title}</div>
-                            <div style={{color:"#64748b",fontSize:11,marginTop:2}}>{q.desc}</div>
-                          </div>
-                          <span style={{fontSize:12,color:"#facc15",fontWeight:700}}>+{q.xpBonus}</span>
-                        </div>
-                        <div style={{height:6,background:"rgba(255,255,255,0.07)",borderRadius:99,overflow:"hidden"}}>
-                          <div style={{height:"100%",width:`${pct}%`,background:done?"#4ade80":phase.color,borderRadius:99,transition:"width 0.5s"}}/>
-                        </div>
-                        <div style={{fontSize:11,color:"#475569",marginTop:5}}>{cur}/{q.target} complete</div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{marginTop:24}}>
-                  <div style={{fontFamily:"'Bebas Neue',cursive",fontSize:16,letterSpacing:2,color:"#475569",marginBottom:12}}>💡 POSTPARTUM TIPS</div>
-                  {[
-                    ["Listen to your body",     "Pressure, pain, or heaviness = stop. You're rebuilding, not proving anything."],
-                    ["Pelvic floor first",       "Core exercises before any jumping. If you feel leaking or heaviness, regress."],
-                    ["Consistency beats intensity","3 shorter sessions > 1 brutal one. Recovery is training."],
-                    ["Sport timeline",           "Most cleared for running/cutting at 12 weeks post-clearance. Tennis & basketball at Phase 4."],
-                  ].map(([title, body]) => (
-                    <div key={title} style={{background:"rgba(255,255,255,0.03)",borderRadius:12,padding:"12px 14px",marginBottom:8,borderLeft:`3px solid ${phase.color}60`}}>
-                      <div style={{fontWeight:600,fontSize:13}}>{title}</div>
-                      <div style={{fontSize:12,color:"#64748b",marginTop:3}}>{body}</div>
+            <div className="card" style={{padding:"16px"}}>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>✦ Gear Collection</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                {GEAR_UNLOCKS.map(g=>{
+                  const unlocked=unlockedGear.includes(g.phase);
+                  return (
+                    <div key={g.phase} style={{background:unlocked?"rgba(255,235,235,0.65)":"rgba(255,255,255,0.35)",
+                      border:`1px solid ${unlocked?C.rose+"30":"rgba(220,180,180,0.15)"}`,
+                      borderRadius:12,padding:"10px 12px",opacity:unlocked?1:0.45}}>
+                      <div style={{fontSize:20}}>{unlocked?g.icon:"🔒"}</div>
+                      <div style={{fontSize:12,fontWeight:500,color:unlocked?C.text:C.muted,marginTop:4}}>{g.name}</div>
+                      <div style={{fontSize:10,color:C.muted,fontStyle:"italic"}}>{g.desc}</div>
                     </div>
-                  ))}
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TRAIN */}
+        {tab==="train"&&(
+          <div>
+            <div style={{display:"flex",gap:5,overflowX:"auto",paddingBottom:6,marginBottom:10}}>
+              {PHASES.map(p=>{
+                const unlocked=xp>=p.xpNeeded;
+                return (
+                  <div key={p.id} style={{flex:"0 0 auto",
+                    background:unlocked?`${p.color}12`:"rgba(255,255,255,0.4)",
+                    border:`1px solid ${unlocked?p.color+"35":"rgba(220,180,180,0.18)"}`,
+                    borderRadius:10,padding:"7px 12px",minWidth:95,opacity:unlocked?1:0.5}}>
+                    <div style={{fontSize:11,color:unlocked?p.color:C.muted,fontWeight:500}}>{unlocked?"✓ ":"🔒 "}{p.name}</div>
+                    <div style={{fontSize:9,color:C.muted}}>{p.weeks}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{display:"flex",gap:5,overflowX:"auto",paddingBottom:8,marginBottom:12}}>
+              {filterOpts.map(f=>(
+                <button key={f} onClick={()=>setFilter(f)} style={{
+                  flex:"0 0 auto",padding:"5px 12px",borderRadius:99,cursor:"pointer",
+                  border:`1px solid ${filter===f?C.rose:"rgba(220,160,160,0.22)"}`,
+                  background:filter===f?`${C.rose}12`:"rgba(255,255,255,0.6)",
+                  color:filter===f?C.rose:C.muted,fontSize:11,fontWeight:500,fontFamily:"'Jost',sans-serif",
+                }}>{f}</button>
+              ))}
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {visible.map(w=><WorkoutCard key={w.id} workout={w} onStart={setActiveWorkout} completed={completedIds.includes(w.id)}/>)}
+            </div>
+          </div>
+        )}
+
+        {/* CHARACTER */}
+        {tab==="character"&&(
+          <div>
+            <div className="card" style={{padding:"20px",marginBottom:14,textAlign:"center"}}>
+              <Avatar charClass={charClass} unlockedGear={unlockedGear} size={90}/>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:20,color:C.text,marginTop:10}}>Your Hero</div>
+              <div style={{fontSize:11,color:C.rose,marginTop:2,fontStyle:"italic"}}>{cls.passive}</div>
+            </div>
+            <div className="card" style={{padding:"16px",marginBottom:14}}>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>⚔️ Stats</div>
+              {Object.entries(charStats).map(([k,v])=><StatBar key={k} statKey={k} value={v}/>)}
+            </div>
+            <div className="card" style={{padding:"16px",marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>✨ Skills</div>
+                <div style={{fontSize:11,color:C.lavender,background:`${C.lavender}12`,border:`1px solid ${C.lavender}28`,borderRadius:99,padding:"2px 10px"}}>
+                  {abilityPts} pts
                 </div>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {cls.skills.map(sk=>{
+                  const data=SKILLS_DATA[sk];
+                  if(!data) return null;
+                  const learned=learnedSkills.includes(sk);
+                  const canLearn=abilityPts>=data.cost&&!learned;
+                  return (
+                    <div key={sk} style={{display:"flex",gap:10,alignItems:"center",
+                      background:learned?"rgba(255,235,235,0.6)":"rgba(255,255,255,0.5)",
+                      border:`1px solid ${learned?C.rose+"30":"rgba(220,180,180,0.18)"}`,
+                      borderRadius:12,padding:"10px 12px"}}>
+                      <span style={{fontSize:20}}>{data.icon}</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:500,color:C.text}}>{sk}</div>
+                        <div style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>{data.desc}</div>
+                      </div>
+                      {learned
+                        ?<span style={{fontSize:11,color:C.sage}}>✓</span>
+                        :<button onClick={()=>learnSkill(sk)} disabled={!canLearn}
+                          style={{background:canLearn?"linear-gradient(135deg,#e8a0a0,#d4748a)":"rgba(220,180,180,0.18)",
+                            color:canLearn?"#fff":C.muted,border:"none",borderRadius:99,
+                            padding:"5px 12px",fontSize:11,cursor:canLearn?"pointer":"default",
+                            fontFamily:"'Jost',sans-serif",fontWeight:500}}>
+                          {data.cost}pt
+                        </button>
+                      }
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {defeatedBosses.length>0&&(
+              <div className="card" style={{padding:"16px",marginBottom:14}}>
+                <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>🏆 Defeated</div>
+                {BOSSES.filter(b=>defeatedBosses.includes(b.id)).map(b=>(
+                  <div key={b.id} style={{display:"flex",gap:10,alignItems:"center",marginBottom:6}}>
+                    <span style={{fontSize:20}}>{b.icon}</span>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:500,color:C.text}}>{b.name}</div>
+                      <div style={{fontSize:10,color:C.sage}}>+{b.xpReward} xp earned ✓</div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
+        )}
 
-          {activeWorkout && (
-            <WorkoutModal workout={activeWorkout} onClose={() => setActiveWorkout(null)} onComplete={handleComplete}/>
-          )}
-        </div>
-      );
-    }
+        {/* QUESTS */}
+        {tab==="quests"&&(
+          <div>
+            <div className="card-pink" style={{padding:"14px 16px",marginBottom:14}}>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic",fontSize:18,color:C.rose}}>This Week's Quests</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:2}}>Complete quests for bonus xp & glory</div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+              {WEEKLY_QUESTS.map(q=>{
+                const cur=questProgress[q.type]||0,done=cur>=q.target,pct=Math.min(100,(cur/q.target)*100);
+                return (
+                  <div key={q.id} className="card" style={{padding:"14px 16px",background:done?"rgba(255,235,235,0.65)":"rgba(255,255,255,0.65)"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
+                      <div>
+                        <div style={{fontSize:14,fontWeight:500,color:C.text}}>{done?"🌸 ":""}{q.title}</div>
+                        <div style={{fontSize:11,color:C.muted,fontStyle:"italic",marginTop:1}}>{q.desc}</div>
+                      </div>
+                      <span style={{fontSize:11,color:C.peach,fontWeight:600}}>+{q.xpBonus}</span>
+                    </div>
+                    <div style={{height:5,background:"rgba(212,116,138,0.1)",borderRadius:99,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:`${pct}%`,background:done?"linear-gradient(90deg,#9dbfa0,#70c490)":"linear-gradient(90deg,#e8a0a0,#d4748a)",borderRadius:99,transition:"width 0.5s"}}/>
+                    </div>
+                    <div style={{fontSize:10,color:C.muted,marginTop:4}}>{cur}/{q.target} complete</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>✦ Achievements</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
+              {ACHIEVEMENTS.map(a=>{
+                const earned=achievements.includes(a.id);
+                return (
+                  <div key={a.id} className="card" style={{display:"flex",gap:12,alignItems:"center",padding:"10px 14px",opacity:earned?1:0.4,background:earned?"rgba(255,235,235,0.65)":"rgba(255,255,255,0.5)"}}>
+                    <span style={{fontSize:20,filter:earned?"none":"grayscale(1)"}}>{a.icon}</span>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:500,color:earned?C.text:C.muted}}>{a.title}</div>
+                      <div style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>{a.desc}</div>
+                    </div>
+                    {earned&&<span style={{marginLeft:"auto",fontSize:12,color:C.sage}}>✓</span>}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>💌 Gentle Reminders</div>
+            {[
+              ["Listen to your body","Pressure, pain, or heaviness = stop. You're rebuilding, not proving anything."],
+              ["Pelvic floor first","Core exercises before any jumping. If you feel leaking or heaviness, regress."],
+              ["Consistency over intensity","3 shorter sessions > 1 brutal one. Rest is part of the training."],
+              ["Sport timeline","Most cleared for running/cutting 12 weeks post-clearance. Tennis & basketball Phase 4."],
+            ].map(([t,b])=>(
+              <div key={t} className="card" style={{padding:"12px 14px",marginBottom:8,borderLeft:`3px solid ${C.blush}`}}>
+                <div style={{fontSize:13,fontWeight:500,color:C.text}}>{t}</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:3,fontStyle:"italic",lineHeight:1.5}}>{b}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-    ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
-  </script>
+      {activeWorkout&&<WorkoutModal workout={activeWorkout} onClose={()=>setActiveWorkout(null)} onComplete={handleComplete}/>}
+      {activeBoss&&<BossModal boss={activeBoss} onClose={()=>setActiveBoss(null)} onDefeat={handleBossDefeat}/>}
+
+      <style>{`
+        @keyframes sparkle{0%,100%{transform:scale(1) rotate(0deg);opacity:1}50%{transform:scale(1.3) rotate(15deg);opacity:0.7}}
+        @keyframes slideDown{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+      `}</style>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
 </body>
 </html>
