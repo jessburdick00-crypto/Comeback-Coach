@@ -23,7 +23,57 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const {useState,useEffect} = React;
+const {useState,useEffect,useRef} = React;
+
+// ── Sound Engine (Web Audio API — no files needed) ──────────────────────────
+const SFX = (() => {
+  let ctx = null;
+  function getCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+  function tone({ freq=440, freq2, type='sine', gain=0.18, attack=0.01, decay=0.08, release=0.12, duration=0.22, delay=0 }) {
+    const ac = getCtx(), t = ac.currentTime + delay;
+    const osc = ac.createOscillator(), env = ac.createGain();
+    osc.connect(env); env.connect(ac.destination);
+    osc.type = type;
+    if (freq2) { osc.frequency.setValueAtTime(freq, t); osc.frequency.linearRampToValueAtTime(freq2, t + duration); }
+    else osc.frequency.setValueAtTime(freq, t);
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(gain, t + attack);
+    env.gain.linearRampToValueAtTime(gain * 0.3, t + attack + decay);
+    env.gain.linearRampToValueAtTime(0, t + duration + release);
+    osc.start(t); osc.stop(t + duration + release + 0.05);
+  }
+  function noise({ gain=0.12, duration=0.08, delay=0, highpass=800 }) {
+    const ac = getCtx(), t = ac.currentTime + delay;
+    const buf = ac.createBuffer(1, Math.ceil(ac.sampleRate * 0.3), ac.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const src = ac.createBufferSource(), filter = ac.createBiquadFilter(), env = ac.createGain();
+    filter.type = 'highpass'; filter.frequency.value = highpass;
+    src.connect(filter); filter.connect(env); env.connect(ac.destination);
+    env.gain.setValueAtTime(gain, t);
+    env.gain.exponentialRampToValueAtTime(0.001, t + duration);
+    src.start(t); src.stop(t + duration + 0.05);
+  }
+  return {
+    tap()        { tone({ freq:660, type:'sine', gain:0.09, attack:0.004, duration:0.07, release:0.05 }); },
+    begin()      { [392,523,659].forEach((f,i)=>tone({ freq:f, type:'triangle', gain:0.12, duration:0.2, release:0.2, delay:i*0.09 })); },
+    timerDone()  { [880,1108].forEach((f,i)=>tone({ freq:f, type:'sine', gain:0.12, attack:0.005, duration:0.28, release:0.45, delay:i*0.18 })); },
+    complete()   { [261,329,392,523,659].forEach((f,i)=>tone({ freq:f, type:'triangle', gain:0.14, duration:0.25, release:0.25, delay:i*0.09 })); },
+    achievement(){ [1047,1319,1568,2093].forEach((f,i)=>tone({ freq:f, type:'sine', gain:0.09, duration:0.15, release:0.3, delay:i*0.07 })); },
+    xp()         { tone({ freq:523, freq2:784, type:'sine', gain:0.1, attack:0.005, duration:0.15, release:0.1 }); },
+    hit()        { tone({ freq:120, freq2:60, type:'sawtooth', gain:0.16, attack:0.002, decay:0.06, duration:0.12, release:0.08 }); noise({ gain:0.14, duration:0.09, highpass:400 }); },
+    weakHit()    { noise({ gain:0.18, duration:0.06, highpass:1200 }); tone({ freq:880, freq2:1320, type:'square', gain:0.11, attack:0.002, duration:0.1, release:0.12, delay:0.03 }); },
+    damage()     { tone({ freq:100, freq2:55, type:'sawtooth', gain:0.2, attack:0.002, decay:0.08, duration:0.15, release:0.1 }); noise({ gain:0.1, duration:0.12, highpass:200 }); },
+    bossWin()    { [523,659,784,1047].forEach((f,i)=>tone({ freq:f, type:'triangle', gain:0.15, duration:0.28, release:0.25, delay:i*0.1 })); tone({ freq:1047, type:'sine', gain:0.12, duration:0.6, release:0.5, delay:0.45 }); },
+    bossLose()   { [392,349,294,261].forEach((f,i)=>tone({ freq:f, type:'triangle', gain:0.13, duration:0.25, release:0.2, delay:i*0.11 })); },
+    skillLearn() { tone({ freq:698, type:'sine', gain:0.12, duration:0.2, release:0.3 }); tone({ freq:1047, type:'sine', gain:0.1, duration:0.2, release:0.4, delay:0.12 }); },
+    classSelect(){ tone({ freq:196, type:'triangle', gain:0.16, attack:0.005, duration:0.18, release:0.15 }); tone({ freq:784, type:'sine', gain:0.1, duration:0.22, release:0.35, delay:0.1 }); },
+  };
+})();
 
 const C = {
   rose:"#d4748a",blush:"#e8a0a0",peach:"#f0b897",cream:"#fdf6f0",
@@ -32,50 +82,108 @@ const C = {
 };
 
 const CLASSES = [
-  {id:"warrior",name:"Iron Maiden",   icon:"⚔️",desc:"Strength-first fighter. Born to lift, built to last.",color:C.rose,     bonusStat:"str",passive:"Battle Hardened: Strength workouts grant +2 bonus STR",skills:["Power Surge","Battle Cry","Iron Will"]},
-  {id:"ranger", name:"Wild Huntress", icon:"🏹",desc:"Swift and graceful. Footwork and agility are her magic.",color:C.sage,    bonusStat:"agi",passive:"Fleet Foot: Agility workouts grant +2 bonus AGI",    skills:["Quick Draw","Wind Step","Eagle Eye"]},
-  {id:"mage",   name:"Arcane Darling",icon:"🔮",desc:"Mind-body sorceress. Mobility and core are her spellcraft.",color:C.lavender,bonusStat:"pwr",passive:"Arcane Flow: Mobility workouts grant +2 bonus PWR",  skills:["Starlight","Mana Veil","Cosmic Pulse"]},
-  {id:"paladin",name:"Golden Paladin",icon:"✨",desc:"Radiant healer-warrior. Vitality and resilience above all.",color:"#e8c97a",bonusStat:"vit",passive:"Divine Grace: Every workout restores +1 VIT",         skills:["Holy Light","Lay on Hands","Sacred Guard"]},
+  {id:"warrior",name:"Iron Maiden",   icon:"⚔",desc:"Strength-first fighter. Born to lift, built to last.",color:C.rose,     bonusStat:"str",passive:"Battle Hardened: Strength workouts grant +2 bonus STR",skills:["Power Surge","Battle Cry","Iron Will","Unbreakable","Warlord's Roar"]},
+  {id:"ranger", name:"Wild Huntress", icon:"◈",desc:"Swift and graceful. Footwork and agility are her magic.",color:C.sage,    bonusStat:"agi",passive:"Fleet Foot: Agility workouts grant +2 bonus AGI",    skills:["Quick Draw","Wind Step","Eagle Eye","Shadow Sprint","Hunter's Mark"]},
+  {id:"mage",   name:"Arcane Darling",icon:"✶",desc:"Mind-body sorceress. Mobility and core are her spellcraft.",color:C.lavender,bonusStat:"pwr",passive:"Arcane Flow: Mobility workouts grant +2 bonus PWR",  skills:["Starlight","Mana Veil","Cosmic Pulse","Arcane Surge","Void Shield"]},
+  {id:"paladin",name:"Golden Paladin",icon:"✦",desc:"Radiant healer-warrior. Vitality and resilience above all.",color:"#e8c97a",bonusStat:"vit",passive:"Divine Grace: Every workout restores +1 VIT",         skills:["Holy Light","Lay on Hands","Sacred Guard","Divine Radiance","Champion's Oath"]},
 ];
 
 const SKILLS_DATA = {
-  "Power Surge": {icon:"💥",desc:"Next Strength workout gives +5 STR",cost:1,stat:"str",bonus:5},
-  "Battle Cry":  {icon:"📣",desc:"All workouts give +10 XP for 3 sessions",cost:1,stat:"xp",bonus:10},
-  "Iron Will":   {icon:"🔩",desc:"Streak protection — miss 1 day, no penalty",cost:2,stat:"str",bonus:3},
-  "Quick Draw":  {icon:"🎯",desc:"Next Agility workout gives +5 AGI",cost:1,stat:"agi",bonus:5},
-  "Wind Step":   {icon:"💨",desc:"Cardio workouts grant double END",cost:2,stat:"end",bonus:4},
-  "Eagle Eye":   {icon:"🦅",desc:"Reveal boss weakness for +20% damage",cost:1,stat:"agi",bonus:3},
-  "Starlight":   {icon:"⭐",desc:"Next Power workout gives +5 PWR",cost:1,stat:"pwr",bonus:5},
-  "Mana Veil":   {icon:"🔵",desc:"Next boss battle: take half damage",cost:1,stat:"pwr",bonus:3},
-  "Cosmic Pulse":{icon:"🌀",desc:"Mobility workouts grant double PWR",cost:2,stat:"pwr",bonus:4},
-  "Holy Light":  {icon:"☀️",desc:"Next workout gives +5 VIT",cost:1,stat:"vit",bonus:5},
-  "Lay on Hands":{icon:"🙌",desc:"Restore 20 HP after a workout",cost:1,stat:"vit",bonus:4},
-  "Sacred Guard":{icon:"🛡️",desc:"Negate one failed boss attempt",cost:2,stat:"vit",bonus:3},
+  // ── Iron Maiden (warrior) ──
+  "Power Surge":   {icon:"💥",desc:"Next Strength workout gives +5 STR",           cost:1,stat:"str",bonus:5},
+  "Battle Cry":    {icon:"📣",desc:"All workouts give +10 XP for 3 sessions",       cost:1,stat:"xp", bonus:10},
+  "Iron Will":     {icon:"🔩",desc:"Streak protection — miss 1 day, no penalty",    cost:2,stat:"str",bonus:3},
+  "Unbreakable":   {icon:"🛡️",desc:"Take no damage on your next boss hit",          cost:2,stat:"vit",bonus:4},
+  "Warlord's Roar":{icon:"🦁",desc:"Boss attacks deal −5 damage for full battle",   cost:3,stat:"str",bonus:2},
+  // ── Wild Huntress (ranger) ──
+  "Quick Draw":    {icon:"🎯",desc:"Next Agility workout gives +5 AGI",             cost:1,stat:"agi",bonus:5},
+  "Wind Step":     {icon:"💨",desc:"Cardio workouts grant double END",              cost:2,stat:"end",bonus:4},
+  "Eagle Eye":     {icon:"🦅",desc:"Reveal boss weakness for +20% damage",          cost:1,stat:"agi",bonus:3},
+  "Shadow Sprint": {icon:"🌿",desc:"First attack each boss battle always crits",    cost:2,stat:"agi",bonus:3},
+  "Hunter's Mark": {icon:"🎯",desc:"Boss takes +4 damage from every attack this battle",cost:3,stat:"agi",bonus:2},
+  // ── Arcane Darling (mage) ──
+  "Starlight":     {icon:"⭐",desc:"Next Power workout gives +5 PWR",               cost:1,stat:"pwr",bonus:5},
+  "Mana Veil":     {icon:"🔵",desc:"Next boss battle: take half damage",            cost:1,stat:"pwr",bonus:3},
+  "Cosmic Pulse":  {icon:"🌀",desc:"Mobility workouts grant double PWR",            cost:2,stat:"pwr",bonus:4},
+  "Arcane Surge":  {icon:"✦",desc:"Next 3 attacks deal +8 bonus damage",           cost:2,stat:"pwr",bonus:3},
+  "Void Shield":   {icon:"✶",desc:"Negate the next 2 boss counter-attacks",       cost:3,stat:"pwr",bonus:2},
+  // ── Golden Paladin ──
+  "Holy Light":    {icon:"☀️",desc:"Next workout gives +5 VIT",                    cost:1,stat:"vit",bonus:5},
+  "Lay on Hands":  {icon:"🙌",desc:"Restore 25 HP at the start of a boss battle",  cost:1,stat:"vit",bonus:4},
+  "Sacred Guard":  {icon:"🛡️",desc:"Negate one failed boss attempt",               cost:2,stat:"vit",bonus:3},
+  "Divine Radiance":{icon:"💛",desc:"Heal 10 HP after each successful boss hit",   cost:2,stat:"vit",bonus:3},
+  "Champion's Oath":{icon:"👑",desc:"All stat gains +1 for your next 5 workouts",  cost:3,stat:"vit",bonus:2},
 };
 
 const GEAR_UNLOCKS = [
-  {phase:1,name:"Adventurer's Sash",icon:"🎀",desc:"Your first ribbon of courage"},
-  {phase:2,name:"Knight's Tiara",   icon:"👸",desc:"Crown of the strengthened"},
-  {phase:3,name:"Dragon's Bloom",   icon:"🌸",desc:"Petal-forged in fire"},
-  {phase:4,name:"Champion's Crown", icon:"👑",desc:"You returned. You conquered."},
+  {id:"g_sash",    phase:1, source:"phase",  name:"Adventurer's Sash",   icon:"🎀", desc:"Your first ribbon of courage"},
+  {id:"g_tiara",   phase:2, source:"phase",  name:"Knight's Tiara",      icon:"👸", desc:"Crown of the strengthened"},
+  {id:"g_bloom",   phase:3, source:"phase",  name:"Dragon's Bloom",      icon:"🌸", desc:"Petal-forged in fire"},
+  {id:"g_crown",   phase:4, source:"phase",  name:"Champion's Crown",    icon:"👑", desc:"You returned. You conquered."},
+  // boss loot drops
+  {id:"g_ache_gem",   bossId:"b1", source:"boss", name:"Ache's Tear",        icon:"🌙", desc:"A gem of melancholy, transformed by breath"},
+  {id:"g_sloth_chain",bossId:"b2", source:"boss", name:"Sloth's Chain",      icon:"⛓️", desc:"The shackles of stillness, broken"},
+  {id:"g_drake_scale",bossId:"b3", source:"boss", name:"Drake's Scale",      icon:"🐉", desc:"Fire-hardened by your explosive power"},
+  {id:"g_phantom_veil",bossId:"b4",source:"boss", name:"Phantom's Veil",     icon:"🌫️", desc:"The ghost of your old self, finally at rest"},
+  {id:"g_hollow_ring",bossId:"b1", source:"boss", name:"Ring of Hollow",     icon:"💍", desc:"A trophy worn only by the breath-brave"},
+  {id:"g_iron_badge",  bossId:"b2", source:"boss", name:"Iron Badge",         icon:"🏅", desc:"Earned by those who moved when stillness called"},
+  {id:"g_fear_shard",  bossId:"b3", source:"boss", name:"Fear's Shard",       icon:"💎", desc:"A crystal born from courage under pressure"},
+  {id:"g_court_orb",   bossId:"b4", source:"boss", name:"Court Orb",          icon:"✶", desc:"The court is yours now"},
 ];
 
 const BOSSES = [
-  {id:"b1",name:"The Hollow Ache",  icon:"🌑",phase:1,xpReward:120,hp:80, maxHp:80, desc:"The heaviness of months past. Face it with breath.",weakness:"Mobility",dmgTypes:{Mobility:20,Strength:12,Cardio:10,Power:8,Agility:8}},
-  {id:"b2",name:"The Iron Sloth",   icon:"🦥",phase:2,xpReward:180,hp:120,maxHp:120,desc:"The comfort of stillness. Shatter it with strength.",weakness:"Strength",dmgTypes:{Strength:25,Agility:15,Cardio:12,Mobility:8,Power:8}},
-  {id:"b3",name:"The Fear Drake",   icon:"🐲",phase:3,xpReward:250,hp:160,maxHp:160,desc:"The dragon of doubt. Slay it with explosive power.",weakness:"Power",  dmgTypes:{Power:28,Agility:18,Strength:14,Mobility:8,Cardio:8}},
-  {id:"b4",name:"The Court Phantom",icon:"👻",phase:4,xpReward:350,hp:200,maxHp:200,desc:"The ghost of who you were. You've already surpassed her.",weakness:"All",dmgTypes:{Strength:20,Agility:20,Power:20,Mobility:20,Cardio:20}},
+  {id:"b1",name:"The Hollow Ache",   icon:"🌑",phase:1,xpReward:120,hp:80, maxHp:80,
+   desc:"The heaviness of months past. Face it with breath.",weakness:"Mobility",
+   dmgTypes:{Mobility:20,Strength:12,Cardio:10,Power:8,Agility:8},
+   loot:["g_ache_gem","g_hollow_ring"],
+   taunt:"The heaviness presses down. ‘You’re too tired for this.’",
+   story:"Six months of holding on.\n\nThe exhaustion lives in your chest — a dull, nameless weight that arrived the day your baby did and never quite left. It doesn’t feel like weakness. It just feels like the air is heavier than it used to be.\n\nIt whispers: stay still. rest more. you’re not ready.\n\nToday, for the first time, you answer it.",
+   victory:"The ache loosens its grip.\n\nYou breathe — really breathe — for what feels like the first time in months. Your body remembers things your mind had forgotten. It’s still here. It was always still here.\n\nSomething shifts. Not dramatically. Just: I can do this. A small certainty, hard-won.\n\nYou carry it forward."},
+  {id:"b2",name:"The Iron Sloth",    icon:"🦥",phase:2,xpReward:180,hp:120,maxHp:120,
+   desc:"The comfort of stillness. Shatter it with strength.",weakness:"Strength",
+   dmgTypes:{Strength:25,Agility:15,Cardio:12,Mobility:8,Power:8},
+   loot:["g_sloth_chain","g_iron_badge"],
+   taunt:"‘You’ve already done so much. Isn’t this enough?’",
+   story:"You beat the hollow ache. You remember that now — the morning you faced it and it loosened.\n\nAnd then comfort arrived. Not the bad kind. The warm kind. The you’ve-done-enough kind. The Sloth doesn’t look like an enemy. It looks like a soft chair and a reasonable excuse.\n\nBut you know what it is now. You’ve seen this before.",
+   victory:"The sloth dissolves, and underneath it you find something unexpected: pride.\n\nNot the loud kind. The quiet kind that lives in your hands and your legs and the memory of every rep you didn’t skip.\n\nThe ache tried to stop you before you started. The sloth tried to stop you halfway. Neither one worked.\n\nYou’re more than halfway now."},
+  {id:"b3",name:"The Fear Drake",    icon:"🐲",phase:3,xpReward:250,hp:160,maxHp:160,
+   desc:"The dragon of doubt. Slay it with explosive power.",weakness:"Power",
+   dmgTypes:{Power:28,Agility:18,Strength:14,Mobility:8,Cardio:8},
+   loot:["g_drake_scale","g_fear_shard"],
+   taunt:"‘What if you’re not who you were? What if you never get back?’",
+   story:"You’ve beaten two of them. The hollow ache that said you couldn’t start. The iron sloth that said you should stop.\n\nThis is when the drake appears. It doesn’t attack your body — it goes straight for your mind. What if you’re not the same? What if you push and something breaks?\n\nThe fear feels sophisticated. Almost kind. It isn’t.\n\nYou’ve come too far to listen to it now.",
+   victory:"The drake falls, and in the silence after, you notice something.\n\nYour body answered every question the fear asked. Every time doubt said you can’t — you did. Every time it said you’re not ready — you were.\n\nThe doubt was never really about your body.\n\nYou know what’s waiting now. One more. The hardest one."},
+  {id:"b4",name:"The Court Phantom", icon:"👻",phase:4,xpReward:350,hp:200,maxHp:200,
+   desc:"The ghost of who you were. You’ve already surpassed her.",weakness:"All",
+   dmgTypes:{Strength:20,Agility:20,Power:20,Mobility:20,Cardio:20},
+   loot:["g_phantom_veil","g_court_orb"],
+   taunt:"‘You’ll never be who you were. She’s already gone.’",
+   story:"She’s standing at the baseline.\n\nShe looks like you. She moves like you — the way you moved before any of this. Effortless, like her body and the court speak the same language.\n\nShe’s been whispering to you this whole journey: you’ll never be this again.\n\nBut here’s what she doesn’t know. You beat the ache. You beat the sloth. You beat the drake. You showed up for months, while sleeping in pieces, while caring for another life, while becoming something new.\n\nShe never did any of that. She was just the beginning.\n\nYou are what came after.",
+   victory:"The phantom doesn’t disappear. She transforms.\n\nShe becomes the version of you that plays with your kid in the backyard. The one who moves through the world like she trusts herself.\n\nYou didn’t return to who you were.\n\nYou became someone who went through everything you went through, and came out here, on this court, still moving.\n\nThat’s not a comeback. That’s a beginning."},
 ];
 
 const PHASES = [
-  {id:1,name:"Foundation",weeks:"Weeks 1–4", color:C.sage,     xpNeeded:0},
-  {id:2,name:"Strength",  weeks:"Weeks 5–10",color:C.peach,    xpNeeded:600},
-  {id:3,name:"Power",     weeks:"Weeks 11–16",color:C.rose,    xpNeeded:1400},
-  {id:4,name:"Sport",     weeks:"Weeks 17+",  color:C.lavender,xpNeeded:2600},
+  {id:1,name:"Foundation",weeks:"Weeks 1–4", color:C.sage,     xpNeeded:0,
+   chapter:"Chapter I — The Listening",
+   tagline:"Every comeback begins with a breath.",
+   narrative:"You are six months postpartum. Your body carried a person into the world. That is not a small thing — that is everything. Before you run, before you jump, before you swing a racket, you listen. You breathe. You find the muscles that went quiet and you say: ‘I’m still here. Come back.’"},
+  {id:2,name:"Strength",  weeks:"Weeks 5–10",color:C.peach,    xpNeeded:600,
+   chapter:"Chapter II — The Building",
+   tagline:"You faced the hollow and won. Now you build.",
+   narrative:"The ache has loosened its grip. You remember now — your body isn’t a thing that broke. It’s a thing that built life. The exhaustion was real, but so is this: you showed up. You moved. And today you lift something heavier than yesterday."},
+  {id:3,name:"Power",     weeks:"Weeks 11–16",color:C.rose,    xpNeeded:1400,
+   chapter:"Chapter III — The Ignition",
+   tagline:"Strength earned. Now you make it explosive.",
+   narrative:"You’ve been building a foundation for months. Quietly, steadily — while caring for another human, while sleeping in pieces, while still becoming. Now it’s time to find out what that foundation can hold. Bigger. Faster. More. The court is getting closer."},
+  {id:4,name:"Sport",     weeks:"Weeks 17+",  color:C.lavender,xpNeeded:2600,
+   chapter:"Chapter IV — The Return",
+   tagline:"The court has been waiting. You’re ready.",
+   narrative:"This is why you started. Not to look a certain way. Not to prove something. But because there is a version of you that slides for a ball, pivots on a dime, and grins in the middle of a rally — and she’s been waiting. She’s been patient. And you’re almost back."},
 ];
 
 const WORKOUTS = [
-  {id:"p1_core",    phase:1,title:"Core Reconnect",       type:"Strength + Mobility",equipment:["Mat"],       duration:25,xp:50,statGains:{str:1,vit:2},
+  // ─── PHASE 1: Foundation (Weeks 1–4) ────────────────────────────────────
+  {id:"p1_core",    phase:1,title:"Core Reconnect",        type:"Strength + Mobility",equipment:["Mat"],       duration:25,xp:50,statGains:{str:1,vit:2},
    exercises:[
     {name:"Diaphragmatic Breathing",     sets:"3",reps:"10 breaths",  note:"Inhale through nose, feel belly + ribs expand"},
     {name:"Heel Slides",                 sets:"3",reps:"10 each side",note:"Keep lower back neutral, engage deep core"},
@@ -84,7 +192,7 @@ const WORKOUTS = [
     {name:"Cat-Cow",                     sets:"2",reps:"10 cycles",   note:"Move through full range, breathe with movement"},
     {name:"Child's Pose Hold",           sets:"2",reps:"45 sec",      note:"Relax hips back, breathe into lower back"},
    ]},
-  {id:"p1_mobility",phase:1,title:"Hip & Shoulder Flow",  type:"Mobility",           equipment:["Mat"],       duration:30,xp:45,statGains:{agi:1,vit:2,pwr:1},
+  {id:"p1_mobility",phase:1,title:"Hip & Shoulder Flow",   type:"Mobility",           equipment:["Mat"],       duration:30,xp:45,statGains:{agi:1,vit:2,pwr:1},
    exercises:[
     {name:"World's Greatest Stretch",        sets:"2",reps:"5 each side",note:"Take your time through each position"},
     {name:"90/90 Hip Rotations",             sets:"3",reps:"8 each side",note:"Sit tall, rotate from hip not spine"},
@@ -93,13 +201,33 @@ const WORKOUTS = [
     {name:"Half-Kneeling Hip Flexor Stretch",sets:"2",reps:"45 sec ea", note:"Tuck pelvis gently under"},
     {name:"Ankle Circles + Calf Raises",     sets:"2",reps:"10 each",   note:"Wake up the lower chain"},
    ]},
-  {id:"p1_bike",    phase:1,title:"Easy Cardio Reboot",   type:"Cardio",             equipment:["Bike"],      duration:20,xp:40,statGains:{end:2,vit:1},
+  {id:"p1_bike",    phase:1,title:"Easy Cardio Reboot",    type:"Cardio",             equipment:["Bike"],      duration:20,xp:40,statGains:{end:2,vit:1},
    exercises:[
     {name:"Warm-Up Spin",     sets:"1",reps:"5 min", note:"Zone 1 — conversational pace, very easy"},
     {name:"Steady State Ride",sets:"1",reps:"12 min",note:"Zone 2 — slight effort, still able to talk"},
     {name:"Cool-Down Spin",   sets:"1",reps:"3 min", note:"Gradually reduce cadence"},
    ]},
-  {id:"p2_lower",   phase:2,title:"Lower Body Power",     type:"Strength",           equipment:["Ball","Mat"],duration:35,xp:70,statGains:{str:2,agi:1,end:1},
+  {id:"p1_activate",phase:1,title:"Lower Body Activate",   type:"Strength",           equipment:["Mat"],       duration:25,xp:50,statGains:{str:2,agi:1},
+   exercises:[
+    {name:"Clamshell",                sets:"3",reps:"15 each side",note:"Keep hips stacked, only top knee lifts"},
+    {name:"Side-Lying Leg Raise",     sets:"3",reps:"12 each side",note:"Foot flexed, squeeze glute at top"},
+    {name:"Glute Bridge March",       sets:"3",reps:"8 each side", note:"Hold bridge, alternate lifting each knee"},
+    {name:"Standing Hip Circle",      sets:"2",reps:"10 each way", note:"Slow full circles, hands on hips"},
+    {name:"Wall Sit",                 sets:"3",reps:"20 sec",      note:"Thighs parallel, back flat on wall"},
+    {name:"Single-Leg Calf Raise",    sets:"2",reps:"12 each",     note:"Hold wall for balance, full range"},
+   ]},
+  {id:"p1_fullbody",phase:1,title:"Gentle Full Body",      type:"Strength + Mobility",equipment:["Mat"],       duration:30,xp:50,statGains:{str:1,agi:1,vit:2},
+   exercises:[
+    {name:"Squat to Chair",           sets:"3",reps:"10",          note:"Sit back slowly, stand with intention"},
+    {name:"Wall Push-Up",             sets:"3",reps:"12",          note:"Hands shoulder width, controlled tempo"},
+    {name:"Standing Hip Hinge",       sets:"3",reps:"10",          note:"Hinge at hips, soft knee — pattern for everything"},
+    {name:"Seated Thoracic Rotation", sets:"2",reps:"8 each side", note:"Sit tall, rotate upper back only"},
+    {name:"Standing Hip Flexor March",sets:"2",reps:"10 each",     note:"Lift knee to hip height, hold 1 sec"},
+    {name:"Supine Spinal Twist",      sets:"2",reps:"30 sec ea",   note:"Knees together, breathe into the twist"},
+   ]},
+
+  // ─── PHASE 2: Strength (Weeks 5–10) ─────────────────────────────────────
+  {id:"p2_lower",   phase:2,title:"Lower Body Strength",   type:"Strength",           equipment:["Ball","Mat"],duration:35,xp:70,statGains:{str:2,agi:1,end:1},
    exercises:[
     {name:"Ball Wall Squat",                 sets:"4",reps:"12",         note:"Ball between wall and lower back, feet out"},
     {name:"Single-Leg Glute Bridge",         sets:"3",reps:"10 each",    note:"Progress from two-leg version"},
@@ -108,7 +236,7 @@ const WORKOUTS = [
     {name:"Step-Back Lunge",                 sets:"3",reps:"10 each",    note:"Control descent, drive through front heel"},
     {name:"Calf Raise on Step",              sets:"3",reps:"15",         note:"Single leg for more challenge"},
    ]},
-  {id:"p2_upper",   phase:2,title:"Upper Body & Posture", type:"Strength",           equipment:["Ball","Mat"],duration:30,xp:65,statGains:{str:2,pwr:1},
+  {id:"p2_upper",   phase:2,title:"Upper Body & Posture",  type:"Strength",           equipment:["Ball","Mat"],duration:30,xp:65,statGains:{str:2,pwr:1},
    exercises:[
     {name:"Ball Push-Up",          sets:"3",reps:"8–10",   note:"Hands on ball for instability challenge"},
     {name:"Ball Prone Y-T-W",      sets:"3",reps:"8 each", note:"Chest on ball, small precise movements"},
@@ -117,7 +245,7 @@ const WORKOUTS = [
     {name:"Ball Chest Stretch",    sets:"2",reps:"45 sec",  note:"Drape back over ball, open chest"},
     {name:"Neck & Trap Release",   sets:"2",reps:"30 sec",  note:"Side tilt, ear to shoulder"},
    ]},
-  {id:"p2_agility", phase:2,title:"Footwork Fundamentals",type:"Agility + Cardio",  equipment:["Mat"],       duration:25,xp:60,statGains:{agi:3,end:1},
+  {id:"p2_agility", phase:2,title:"Footwork Fundamentals", type:"Agility + Cardio",  equipment:["Mat"],       duration:25,xp:60,statGains:{agi:3,end:1},
    exercises:[
     {name:"Lateral Shuffle (slow)",  sets:"4",reps:"30 sec",        note:"Soft knees, weight on balls of feet"},
     {name:"Pivot Steps",             sets:"3",reps:"10 each side",  note:"Tennis pivot — outside foot plants"},
@@ -125,7 +253,35 @@ const WORKOUTS = [
     {name:"Forward/Back Hop",        sets:"3",reps:"20 sec",        note:"Small hops, land softly"},
     {name:"Bike Intervals",          sets:"4",reps:"2 min on/1 off",note:"Push to Zone 3 on work intervals"},
    ]},
-  {id:"p3_explosive",phase:3,title:"Explosive Lower Body",type:"Power",             equipment:["Mat"],       duration:35,xp:90,statGains:{pwr:3,agi:2,str:1},
+  {id:"p2_core",    phase:2,title:"Core Builder",           type:"Strength + Mobility",equipment:["Ball","Mat"],duration:30,xp:65,statGains:{str:1,pwr:2,vit:1},
+   exercises:[
+    {name:"Dead Bug with Ball",           sets:"3",reps:"8 each side", note:"Squeeze ball between hands and knees"},
+    {name:"Pallof Press (isometric hold)",sets:"3",reps:"20 sec ea",   note:"Resist rotation — arms extended"},
+    {name:"Plank Hold",                   sets:"3",reps:"30 sec",      note:"Neutral spine, breathe steadily"},
+    {name:"Side Plank",                   sets:"2",reps:"20 sec ea",   note:"Stack feet or stagger — keep hips lifted"},
+    {name:"Ball Rollout",                 sets:"3",reps:"10",          note:"Kneel on mat, roll ball out slowly"},
+    {name:"Seated Leg Lowering",          sets:"3",reps:"8 each",      note:"Lower one leg slowly, press lower back down"},
+   ]},
+  {id:"p2_fullbody",phase:2,title:"Full Body Circuit",      type:"Strength",           equipment:["Ball","Mat"],duration:35,xp:75,statGains:{str:2,end:2},
+   exercises:[
+    {name:"Squat to Press (ball overhead)",sets:"3",reps:"10",        note:"Squat deep, press ball overhead on rise"},
+    {name:"Reverse Lunge",                 sets:"3",reps:"10 each",   note:"Long stride back, front shin stays vertical"},
+    {name:"Ball Push-Up",                  sets:"3",reps:"10",        note:"Slow down (3 counts), explosive up"},
+    {name:"Ball Hamstring Curl",           sets:"3",reps:"10",        note:"Double or single leg — match your level"},
+    {name:"Plank to Rotation",             sets:"3",reps:"6 each",    note:"From plank, rotate hip toward ceiling"},
+    {name:"Bicycle Crunch (slow)",         sets:"3",reps:"10 each",   note:"Full rotation, elbow to opposite knee"},
+   ]},
+  {id:"p2_cardio",  phase:2,title:"Cardio Intervals",       type:"Cardio",             equipment:["Bike","Mat"],duration:30,xp:65,statGains:{end:3,agi:1},
+   exercises:[
+    {name:"Warm-Up Spin",         sets:"1",reps:"4 min",         note:"Zone 1 — easy warmup"},
+    {name:"Bike Intervals",       sets:"6",reps:"1 min on/1 off",note:"Zone 3 on, Zone 1 off — push and recover"},
+    {name:"Cool-Down Spin",       sets:"1",reps:"3 min",         note:"Easy pace, bring heart rate down"},
+    {name:"Standing Hip Circle",  sets:"2",reps:"10 each way",   note:"Open up the hips after the ride"},
+    {name:"Calf Raise on Step",   sets:"2",reps:"15",            note:"Flush out the calves"},
+   ]},
+
+  // ─── PHASE 3: Power (Weeks 11–16) ────────────────────────────────────────
+  {id:"p3_explosive",phase:3,title:"Explosive Lower Body",  type:"Power",             equipment:["Mat"],       duration:35,xp:90,statGains:{pwr:3,agi:2,str:1},
    exercises:[
     {name:"Jump Squat (low height)",  sets:"4",reps:"8",            note:"Land softly — toes, ball, heel"},
     {name:"Lateral Bound",            sets:"4",reps:"6 each side",  note:"Push off outside foot, stick landing 2 sec"},
@@ -134,7 +290,7 @@ const WORKOUTS = [
     {name:"Ball Drop Squat",          sets:"3",reps:"10",           note:"Toss ball, drop into squat, catch"},
     {name:"Single Leg Balance to Hop",sets:"3",reps:"5 each",       note:"Balance 2 sec, small hop, rebalance"},
    ]},
-  {id:"p3_core",    phase:3,title:"Rotational Core",      type:"Power + Core",       equipment:["Ball","Mat"],duration:30,xp:85,statGains:{pwr:2,str:2,vit:1},
+  {id:"p3_rotcore", phase:3,title:"Rotational Core",        type:"Power + Core",       equipment:["Ball","Mat"],duration:30,xp:85,statGains:{pwr:2,str:2,vit:1},
    exercises:[
     {name:"Ball Russian Twist",           sets:"4",reps:"12 each side",note:"Slow with control, rotate from thoracic spine"},
     {name:"Pallof Press (isometric hold)",sets:"3",reps:"20 sec ea",   note:"Resist rotation — arms extended"},
@@ -142,28 +298,123 @@ const WORKOUTS = [
     {name:"Plank to Rotation",            sets:"3",reps:"8 each side", note:"From plank, rotate hip toward ceiling"},
     {name:"Dead Bug with Ball",           sets:"3",reps:"8 each side", note:"Squeeze ball between hands and knees"},
    ]},
+  {id:"p3_upper",   phase:3,title:"Upper Body Power",       type:"Power + Strength",   equipment:["Ball","Mat"],duration:30,xp:85,statGains:{str:3,pwr:2},
+   exercises:[
+    {name:"Explosive Push-Up",        sets:"4",reps:"6",          note:"Drive hands off floor, absorb landing"},
+    {name:"Ball Slam (onto mat)",     sets:"4",reps:"8",          note:"Full overhead extension, slam hard — great for tennis"},
+    {name:"Pike Push-Up",             sets:"3",reps:"10",         note:"Loading the shoulders for overhead reach"},
+    {name:"Ball Prone Y-T-W",         sets:"3",reps:"10 each",    note:"Rotator cuff and scapula — racket sport essential"},
+    {name:"Tricep Dip (off chair)",   sets:"3",reps:"12",         note:"Full dip — slow down, fast up"},
+    {name:"Ball Chest Stretch",       sets:"2",reps:"45 sec",     note:"Counter all the pressing work"},
+   ]},
+  {id:"p3_condition",phase:3,title:"Sport Conditioning",    type:"Agility + Power",    equipment:["Mat"],       duration:35,xp:95,statGains:{agi:3,end:2,pwr:1},
+   exercises:[
+    {name:"Box Run (4 corners)",       sets:"5",reps:"30 sec",        note:"Imagine a 6ft box — sprint each corner"},
+    {name:"Lateral Bound",             sets:"4",reps:"8 each side",   note:"Distance and stick — build court coverage"},
+    {name:"Forward/Back Hop",          sets:"4",reps:"30 sec",        note:"Increase speed each set"},
+    {name:"Tuck Step + Cross Step",    sets:"4",reps:"12 each",       note:"Speed up from Phase 2 — snap the step"},
+    {name:"Reactive Lateral Shuffle",  sets:"4",reps:"8 dir changes", note:"Explosive change of direction"},
+    {name:"Single Leg Balance to Hop", sets:"3",reps:"8 each",        note:"Harder than it looks — this is sport-ready stability"},
+   ]},
+  {id:"p3_totalbody",phase:3,title:"Total Body Power",      type:"Power",              equipment:["Ball","Mat"],duration:35,xp:90,statGains:{str:2,pwr:2,agi:2},
+   exercises:[
+    {name:"Jump Squat (low height)",   sets:"4",reps:"10",            note:"Faster tempo — pop up quickly"},
+    {name:"Explosive Push-Up",         sets:"3",reps:"6",             note:"Quality over quantity"},
+    {name:"Split Jump",                sets:"3",reps:"8 each",        note:"Drive through both legs"},
+    {name:"Ball Slam (onto mat)",      sets:"3",reps:"8",             note:"Full body power chain"},
+    {name:"Lateral Bound",             sets:"3",reps:"8 each side",   note:"Stick each landing 2 sec"},
+    {name:"Ball Drop Squat",           sets:"3",reps:"10",            note:"React fast — catch low"},
+   ]},
+  {id:"p3_mobility", phase:3,title:"Power Mobility",        type:"Mobility",           equipment:["Mat"],       duration:25,xp:70,statGains:{pwr:1,agi:2,vit:2},
+   exercises:[
+    {name:"World's Greatest Stretch",       sets:"3",reps:"5 each side",note:"Now add a slight pulse at the end range"},
+    {name:"90/90 Hip Rotations",            sets:"3",reps:"10 each",   note:"Move faster than Phase 1 — build dynamic range"},
+    {name:"Lateral Hip Swing",              sets:"2",reps:"15 each",   note:"Hold wall, swing leg side to side, controlled"},
+    {name:"Thread the Needle",              sets:"2",reps:"10 each",   note:"Reach further and hold 2 sec at end"},
+    {name:"Standing Hip Flexor March",      sets:"3",reps:"12 each",   note:"Drive knee higher, add a small hop"},
+    {name:"Ankle Circles + Calf Raises",    sets:"3",reps:"15 each",   note:"Full range, single leg for more challenge"},
+   ]},
+
+  // ─── PHASE 4: Sport Return (Weeks 17+) ───────────────────────────────────
+  {id:"p4_tennis",  phase:4,title:"Tennis Return",          type:"Agility + Power",    equipment:["Mat"],       duration:40,xp:110,statGains:{agi:3,pwr:2,str:1},
+   exercises:[
+    {name:"Pivot Steps",               sets:"5",reps:"12 each side",  note:"Tennis pivot — outside foot plants, explosive push-off"},
+    {name:"Split Step Practice",       sets:"4",reps:"15",            note:"Small hop landing in athletic position — do this before every drill"},
+    {name:"Forehand Drive Step",       sets:"4",reps:"10 each",       note:"Step out, rotate hips and torso, follow through swing arm"},
+    {name:"Lateral Bound",             sets:"4",reps:"8 each side",   note:"Simulates wide ball recovery — push hard off outside foot"},
+    {name:"Ball Slam (onto mat)",      sets:"4",reps:"10",            note:"Overhead to rotational power — racket arm loading"},
+    {name:"Reactive Lateral Shuffle",  sets:"5",reps:"10 dir changes",note:"Match-pace shuffling — stay on balls of feet"},
+   ]},
+  {id:"p4_basketball",phase:4,title:"Basketball Return",    type:"Agility + Power",    equipment:["Mat"],       duration:40,xp:110,statGains:{agi:3,pwr:2,end:1},
+   exercises:[
+    {name:"Defensive Slide Drill",     sets:"5",reps:"30 sec",        note:"Wide stance, low hips, mirror opponent — no crossing feet"},
+    {name:"Tuck Step + Cross Step",    sets:"4",reps:"15 each",       note:"Basketball crossover — stay low through the change"},
+    {name:"Jump Squat (low height)",   sets:"4",reps:"10",            note:"Simulate boxing out and vertical leap"},
+    {name:"Box Run (4 corners)",       sets:"5",reps:"40 sec",        note:"Simulates cutting in the paint"},
+    {name:"Single Leg Balance to Hop", sets:"4",reps:"8 each",        note:"Land and hold — one-leg stability for post play"},
+    {name:"Forward/Back Hop",          sets:"4",reps:"30 sec",        note:"Fast feet — simulate defensive recovery steps"},
+   ]},
+  {id:"p4_conditioning",phase:4,title:"Court Conditioning",type:"Cardio + Power",     equipment:["Bike","Mat"],duration:40,xp:105,statGains:{end:3,pwr:2,agi:1},
+   exercises:[
+    {name:"Warm-Up Spin",             sets:"1",reps:"4 min",          note:"Easy warmup before the intensity"},
+    {name:"Bike Intervals",           sets:"8",reps:"45 sec on/30 off",note:"Sport-level intervals — go hard, fully recover"},
+    {name:"Cool-Down Spin",           sets:"1",reps:"3 min",          note:"Bring heart rate down gradually"},
+    {name:"Reactive Lateral Shuffle", sets:"4",reps:"10 dir changes", note:"Off the bike straight into footwork — sport-specific fatigue"},
+    {name:"Split Jump",               sets:"3",reps:"8 each",         note:"Power under fatigue — this is game conditions"},
+    {name:"World's Greatest Stretch", sets:"2",reps:"5 each side",    note:"Full recovery stretch after the work"},
+   ]},
+  {id:"p4_mobility", phase:4,title:"Sport Mobility",        type:"Mobility",           equipment:["Mat"],       duration:30,xp:80,statGains:{agi:2,pwr:1,vit:2},
+   exercises:[
+    {name:"World's Greatest Stretch",       sets:"3",reps:"6 each side",note:"Go deeper than before — you've earned this range"},
+    {name:"90/90 Hip Rotations",            sets:"3",reps:"12 each",   note:"Full rotation, add a lean forward at end range"},
+    {name:"Lateral Hip Swing",              sets:"3",reps:"15 each",   note:"Dynamic — simulate wide step recovery"},
+    {name:"Thread the Needle",              sets:"2",reps:"10 each",   note:"Thoracic rotation for serving and shooting"},
+    {name:"Half-Kneeling Hip Flexor Stretch",sets:"3",reps:"45 sec ea",note:"Sprint and cut demand full hip extension"},
+    {name:"Ankle Circles + Calf Raises",    sets:"3",reps:"15 each",   note:"Every court sport lives on ankle mobility"},
+   ]},
+  {id:"p4_circuit", phase:4,title:"Return-to-Sport Circuit",type:"Power + Agility",    equipment:["Ball","Mat"],duration:40,xp:120,statGains:{str:2,agi:2,pwr:2,end:1},
+   exercises:[
+    {name:"Ball Slam (onto mat)",      sets:"4",reps:"10",            note:"Full power — this is what you trained for"},
+    {name:"Lateral Bound",             sets:"4",reps:"10 each side",  note:"Max distance, stick each landing 2 sec"},
+    {name:"Explosive Push-Up",         sets:"4",reps:"8",             note:"Upper body power for tennis, basketball handles"},
+    {name:"Box Run (4 corners)",       sets:"5",reps:"45 sec",        note:"Full court speed — give it everything"},
+    {name:"Jump Squat (low height)",   sets:"4",reps:"10",            note:"Fast, powerful — game speed"},
+    {name:"Reactive Lateral Shuffle",  sets:"5",reps:"12 dir changes",note:"Final test — control at full speed"},
+   ]},
 ];
 
 const ACHIEVEMENTS = [
-  {id:"first",  icon:"🌸",title:"First Petal",   desc:"Complete your first workout", condition:s=>s.totalWorkouts>=1},
-  {id:"streak3",icon:"🕯️",title:"Candlelit",     desc:"3-day streak",                condition:s=>s.streak>=3},
-  {id:"streak7",icon:"✨",title:"Starlit Week",  desc:"7-day streak",                condition:s=>s.streak>=7},
-  {id:"phase2", icon:"🎀",title:"Ribbon Earned", desc:"Reach Strength phase",        condition:s=>s.totalXP>=600},
-  {id:"phase3", icon:"🌹",title:"Rose of Power", desc:"Reach Power phase",           condition:s=>s.totalXP>=1400},
-  {id:"phase4", icon:"👑",title:"Queen Returned",desc:"Reach Sport phase",           condition:s=>s.totalXP>=2600},
-  {id:"w10",    icon:"💫",title:"Constellation", desc:"Complete 10 workouts",        condition:s=>s.totalWorkouts>=10},
-  {id:"boss1",  icon:"🌑",title:"Ache Slayer",   desc:"Defeat The Hollow Ache",      condition:s=>s.defeatedBosses.includes("b1")},
-  {id:"boss2",  icon:"🦥",title:"Sloth Slayer",  desc:"Defeat The Iron Sloth",       condition:s=>s.defeatedBosses.includes("b2")},
+  {id:"first",  icon:"🌸",title:"First Petal",   desc:"You showed up. That’s the whole thing.",                        condition:s=>s.totalWorkouts>=1},
+  {id:"streak3",icon:"🕯️",title:"Candlelit",     desc:"Three days in a row. The ache had no answer for this.",             condition:s=>s.streak>=3},
+  {id:"streak7",icon:"✦",title:"Starlit Week",  desc:"Seven days. A full week of choosing yourself.",                     condition:s=>s.streak>=7},
+  {id:"phase2", icon:"🎀",title:"Ribbon Earned", desc:"The foundation held. Now you build on it.",                        condition:s=>s.totalXP>=600},
+  {id:"phase3", icon:"🌹",title:"Rose of Power", desc:"Strength wasn’t enough. You wanted more. So you went and got it.", condition:s=>s.totalXP>=1400},
+  {id:"phase4", icon:"👑",title:"Queen Returned",desc:"The court is in sight. She’s been waiting.",                    condition:s=>s.totalXP>=2600},
+  {id:"w10",    icon:"💫",title:"Constellation", desc:"Ten workouts. Ten times you answered instead of stayed still.",     condition:s=>s.totalWorkouts>=10},
+  {id:"w20",    icon:"🌟",title:"Star Athlete",  desc:"Twenty. The sloth never had a chance against someone like you.",   condition:s=>s.totalWorkouts>=20},
+  {id:"boss1",  icon:"🌑",title:"Ache Slayer",   desc:"You breathed through it. The hollow ache remembers your name.",    condition:s=>s.defeatedBosses.includes("b1")},
+  {id:"boss2",  icon:"🦥",title:"Sloth Slayer",  desc:"Comfort tried. You were stronger than comfortable.",               condition:s=>s.defeatedBosses.includes("b2")},
+  {id:"boss3",  icon:"🐲",title:"Drake Tamer",   desc:"The fear asked ‘what if’. Your body answered.",                condition:s=>s.defeatedBosses.includes("b3")},
+  {id:"boss4",  icon:"👻",title:"Court Champion",desc:"She was just the beginning. You are what came after.",             condition:s=>s.defeatedBosses.includes("b4")},
 ];
 
 const WEEKLY_QUESTS = [
-  {id:"q1",title:"Bloom Every Day",desc:"Complete 3 workouts this week",xpBonus:75,target:3,type:"workouts"},
-  {id:"q2",title:"Soft & Strong",  desc:"Do 2 mobility sessions",       xpBonus:60,target:2,type:"mobility"},
-  {id:"q3",title:"Cardio Darling", desc:"Hop on the bike twice",        xpBonus:50,target:2,type:"bike"},
+  {id:"q1",title:"Bloom Every Day",
+   desc:"Three workouts this week. Three more answers to the thing that says you can’t.",
+   flavor:"The ache loses a little more ground every time you show up.",
+   xpBonus:75,target:3,type:"workouts"},
+  {id:"q2",title:"Soft & Strong",
+   desc:"Two mobility sessions. This is how you rebuild the foundation the right way.",
+   flavor:"The body that carried life needs gentleness as much as it needs strength.",
+   xpBonus:60,target:2,type:"mobility"},
+  {id:"q3",title:"Cardio Darling",
+   desc:"Two rides on the bike. The sloth hates cardio. That’s reason enough.",
+   flavor:"Endurance isn’t about speed. It’s about deciding not to stop.",
+   xpBonus:50,target:2,type:"bike"},
 ];
 
 const statMeta = {
-  str:{label:"Strength",icon:"⚔️",color:"#e87070"},
+  str:{label:"Strength",icon:"⚔",color:"#e87070"},
   agi:{label:"Agility", icon:"🏃",color:"#70c490"},
   end:{label:"Endurance",icon:"🫀",color:"#70a8e8"},
   pwr:{label:"Power",   icon:"⚡",color:"#c090e8"},
@@ -178,11 +429,12 @@ function getNextPhase(xp){ const c=getPhase(xp); return PHASES.find(p=>p.id===c.
 function getProgress(xp){ const c=getPhase(xp),n=getNextPhase(xp); if(!n) return 100; return Math.min(100,Math.round(((xp-c.xpNeeded)/(n.xpNeeded-c.xpNeeded))*100)); }
 
 // ── Avatar ──
-function Avatar({charClass,unlockedGear,size=110}){
-  const cls=CLASSES.find(c=>c.id===charClass)||CLASSES[0];
-  const gl=unlockedGear.length;
-  const glows=["transparent","rgba(157,191,160,0.3)","rgba(240,184,151,0.35)","rgba(212,116,138,0.4)","rgba(201,168,212,0.5)"];
-  const crowns=["","🌿","🎀","🌸","👑"];
+function Avatar({charClass, unlockedGear, totalXP=0, size=110}){
+  const cls = CLASSES.find(c=>c.id===charClass)||CLASSES[0];
+  const gear = unlockedGear.filter(g=>GEAR_UNLOCKS.find(u=>u.id===g&&u.source==="phase")).length;
+  const glows = ["transparent","rgba(157,191,160,0.35)","rgba(240,184,151,0.4)","rgba(212,116,138,0.45)","rgba(201,168,212,0.55)"];
+  const crowns = ["","🌿","🎀","🌸","👑"];
+  const gl = Math.min(gear,4);
   return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
       <div style={{width:size,height:size,borderRadius:"50%",
@@ -190,11 +442,11 @@ function Avatar({charClass,unlockedGear,size=110}){
         border:`2px solid ${cls.color}70`,
         boxShadow:`0 0 ${18+gl*8}px ${glows[gl]},0 4px 20px rgba(212,116,138,0.12)`,
         display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
-        fontSize:size*0.38,position:"relative",transition:"all 0.4s"}}>
+        fontSize:size*0.42,position:"relative",transition:"all 0.4s"}}>
         <span>👩</span>
         {gl>0&&<div style={{position:"absolute",top:-5,right:-2,fontSize:size*0.22,
-          animation:"sparkle 2.5s ease-in-out infinite"}}>{crowns[Math.min(gl,4)]}</div>}
-        <div style={{position:"absolute",bottom:2,fontSize:size*0.2,opacity:0.85}}>{cls.icon}</div>
+          animation:"sparkle 2.5s ease-in-out infinite"}}>{crowns[gl]}</div>}
+        <div style={{position:"absolute",bottom:2,fontSize:size*0.22,opacity:0.85}}>{cls.icon}</div>
       </div>
       <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic",fontSize:13,color:cls.color}}>{cls.name}</div>
     </div>
@@ -274,20 +526,26 @@ function ClassPicker({onSelect}){
   return (
     <div style={{minHeight:"100vh",background:`linear-gradient(160deg,#fdf0f3,#fdf6f0,#f5f0fd)`,
       display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"30px 20px"}}>
-      <div style={{textAlign:"center",marginBottom:32}}>
-        <div style={{fontSize:32,marginBottom:8}}>✦</div>
-        <h1 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:40,fontWeight:600,color:C.text,lineHeight:1.1}}>
+      <div style={{textAlign:"center",marginBottom:28}}>
+        <div style={{fontSize:28,marginBottom:14}}>✦</div>
+        <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic",fontSize:15,color:C.rose,
+          maxWidth:280,margin:"0 auto 18px",lineHeight:2,opacity:0.9}}>
+          You carried a life into the world.<br/>
+          Now it's time to come back to your own.
+        </div>
+        <h1 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:34,fontWeight:600,color:C.text,lineHeight:1.1,margin:"0 0 8px"}}>
           Choose Your Class
         </h1>
-        <p style={{color:C.muted,fontSize:13,marginTop:10,maxWidth:300,margin:"10px auto 0",fontStyle:"italic"}}>
-          Each class shapes how your stats grow. This is where your story begins.
+        <p style={{color:C.muted,fontSize:12,maxWidth:280,margin:"0 auto",fontStyle:"italic",lineHeight:1.6}}>
+          Four chapters ahead. Four bosses to face.<br/>
+          Your class shapes how your story unfolds.
         </p>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,maxWidth:480,width:"100%"}}>
         {CLASSES.map(cls=>(
           <div key={cls.id}
             onMouseEnter={()=>setHov(cls.id)} onMouseLeave={()=>setHov(null)}
-            onClick={()=>onSelect(cls.id)}
+            onClick={()=>{ SFX.classSelect(); onSelect(cls.id); }}
             style={{
               background:hov===cls.id?`linear-gradient(135deg,${cls.color}18,${cls.color}08)`:"rgba(255,255,255,0.8)",
               border:`1.5px solid ${hov===cls.id?cls.color+"70":"rgba(220,160,160,0.25)"}`,
@@ -296,7 +554,10 @@ function ClassPicker({onSelect}){
               transform:hov===cls.id?"translateY(-3px)":"none",
               boxShadow:hov===cls.id?`0 10px 30px ${cls.color}20`:"0 2px 12px rgba(212,116,138,0.06)",
             }}>
-            <div style={{fontSize:28,marginBottom:8}}>{cls.icon}</div>
+            <div style={{fontSize:36,marginBottom:8,color:cls.color,lineHeight:1,
+              filter:`drop-shadow(0 0 8px ${cls.color}50)`}}>
+              {cls.icon}
+            </div>
             <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:18,fontWeight:600,color:C.text}}>{cls.name}</div>
             <div style={{fontSize:11,color:C.muted,marginTop:4,lineHeight:1.5,fontStyle:"italic"}}>{cls.desc}</div>
             <div style={{marginTop:10,fontSize:10,color:cls.color,fontWeight:500,
@@ -1632,6 +1893,749 @@ const DIAGRAMS = {
       <Cue x={210} y={140} text="30 sec each side"/>
     </svg>
   ),
+
+  // ─── PHASE 1 NEW ─────────────────────────────────────────────────────
+  "Clamshell": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="side-lying — knees together"/><FL x={210} text="top knee lifts"/>
+      {/* LEFT: side-lying, knees stacked */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={22} cy={108} r={9}/>
+        <Seg x1={31} y1={108} x2={95} y2={112}/>
+        <Seg x1={48} y1={110} x2={44} y2={128}/>
+        <Seg x1={95} y1={112} x2={118} y2={124}/><Seg x1={118} y1={124} x2={128} y2={140}/>
+        <Seg x1={103} y1={113} x2={126} y2={124}/><Seg x1={126} y1={124} x2={136} y2={140}/>
+      </g>
+      <Arr x1={148} y1={112} x2={160} y2={112} color={PK}/>
+      {/* RIGHT: top knee lifted */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={162} cy={108} r={9}/>
+        <Seg x1={171} y1={108} x2={235} y2={112}/>
+        <Seg x1={188} y1={110} x2={184} y2={128}/>
+        <Seg x1={235} y1={112} x2={258} y2={124}/><Seg x1={258} y1={124} x2={268} y2={140}/>
+        {/* top knee raised */}
+        <Seg x1={243} y1={113} x2={252} y2={92}/><Seg x1={252} y1={92} x2={268} y2={108}/>
+      </g>
+      <Arr x1={252} y1={112} x2={252} y2={95} color={PK}/>
+      <Cue x={140} y={156} text="hips stay stacked — don't roll back"/>
+    </svg>
+  ),
+
+  "Side-Lying Leg Raise": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="start — legs stacked"/><FL x={210} text="top leg lifts"/>
+      {/* LEFT faded */}
+      <g color="#9a7a7a" opacity={0.4}>
+        <Head cx={22} cy={105} r={9}/>
+        <Seg x1={31} y1={105} x2={100} y2={108}/>
+        <Seg x1={48} y1={106} x2={44} y2={125}/>
+        <Seg x1={100} y1={108} x2={135} y2={112}/><Seg x1={135} y1={112} x2={138} y2={140}/>
+        <Seg x1={108} y1={109} x2={140} y2={113}/><Seg x1={140} y1={113} x2={143} y2={140}/>
+      </g>
+      <Arr x1={148} y1={108} x2={160} y2={108} color={PK}/>
+      {/* RIGHT: top leg raised straight */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={162} cy={105} r={9}/>
+        <Seg x1={171} y1={105} x2={240} y2={108}/>
+        <Seg x1={188} y1={106} x2={184} y2={125}/>
+        {/* bottom leg */}
+        <Seg x1={240} y1={108} x2={268} y2={112}/><Seg x1={268} y1={112} x2={272} y2={140}/>
+        {/* top leg raised */}
+        <Seg x1={248} y1={108} x2={272} y2={90}/>
+      </g>
+      <Arr x1={266} y1={100} x2={266} y2={86} color={PK}/>
+      <Cue x={220} y={128} text="foot flexed, squeeze glute"/>
+    </svg>
+  ),
+
+  "Glute Bridge March": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="bridge held"/><FL x={210} text="one knee lifts"/>
+      {/* LEFT: bridge */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={28} cy={108} r={9}/>
+        <Seg x1={37} y1={108} x2={100} y2={110}/>
+        <Seg x1={50} y1={108} x2={45} y2={128}/>
+        <Seg x1={100} y1={110} x2={115} y2={92}/><Seg x1={115} y1={92} x2={122} y2={110}/>
+        <Seg x1={109} y1={110} x2={124} y2={92}/><Seg x1={124} y1={92} x2={131} y2={110}/>
+      </g>
+      <Arr x1={118} y1={92} x2={118} y2={78} color={PK}/>
+      <Arr x1={148} y1={100} x2={160} y2={100} color={PK}/>
+      {/* RIGHT: bridge + one knee lifted */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={165} cy={108} r={9}/>
+        <Seg x1={174} y1={108} x2={237} y2={110}/>
+        <Seg x1={187} y1={108} x2={182} y2={128}/>
+        {/* planted leg */}
+        <Seg x1={237} y1={110} x2={252} y2={92}/><Seg x1={252} y1={92} x2={259} y2={110}/>
+        {/* marching leg — knee up */}
+        <Seg x1={246} y1={110} x2={248} y2={85}/><Seg x1={248} y1={85} x2={255} y2={98}/>
+      </g>
+      <Arr x1={248} y1={90} x2={248} y2={76} color={PK}/>
+      <Cue x={140} y={156} text="hold hips level — don't drop the bridge"/>
+    </svg>
+  ),
+
+  "Standing Hip Circle": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="circle forward"/><FL x={210} text="circle back"/>
+      {/* LEFT: hip circling forward */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={65} cy={30} r={9}/><Seg x1={65} y1={39} x2={65} y2={80}/>
+        <Seg x1={57} y1={80} x2={52} y2={118}/><Seg x1={52} y1={118} x2={48} y2={140}/>
+        <Seg x1={73} y1={80} x2={80} y2={118}/><Seg x1={80} y1={118} x2={84} y2={140}/>
+        <Seg x1={65} y1={52} x2={44} y2={62}/><Seg x1={65} y1={52} x2={86} y2={62}/>
+      </g>
+      <ellipse cx={65} cy={80} rx={18} ry={10} fill="none" stroke={PK} strokeWidth={1.8} strokeDasharray="5 3"/>
+      <Arr x1={82} y1={77} x2={83} y2={84} color={PK}/>
+      <Arr x1={148} y1={80} x2={160} y2={80} color={PK}/>
+      {/* RIGHT: circling back */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={30} r={9}/><Seg x1={210} y1={39} x2={210} y2={80}/>
+        <Seg x1={202} y1={80} x2={196} y2={118}/><Seg x1={196} y1={118} x2={192} y2={140}/>
+        <Seg x1={218} y1={80} x2={226} y2={118}/><Seg x1={226} y1={118} x2={230} y2={140}/>
+        <Seg x1={210} y1={52} x2={189} y2={62}/><Seg x1={210} y1={52} x2={231} y2={62}/>
+      </g>
+      <ellipse cx={210} cy={80} rx={18} ry={10} fill="none" stroke={PK} strokeWidth={1.8} strokeDasharray="5 3"/>
+      <Arr x1={192} y1={83} x2={193} y2={76} color={PK}/>
+      <Cue x={140} y={156} text="slow full circles — 10 each way"/>
+    </svg>
+  ),
+
+  "Wall Sit": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="standing — prep"/><FL x={210} text="wall sit — hold"/>
+      {/* wall lines */}
+      <line x1={110} y1={10} x2={110} y2={140} stroke={PK} strokeWidth={3} strokeOpacity={0.15}/>
+      <line x1={250} y1={10} x2={250} y2={140} stroke={PK} strokeWidth={3} strokeOpacity={0.15}/>
+      {/* LEFT: standing upright */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={68} cy={28} r={9}/><Seg x1={68} y1={37} x2={68} y2={80}/>
+        <Seg x1={68} y1={52} x2={48} y2={65}/><Seg x1={68} y1={52} x2={88} y2={65}/>
+        <Seg x1={60} y1={80} x2={55} y2={118}/><Seg x1={55} y1={118} x2={52} y2={140}/>
+        <Seg x1={76} y1={80} x2={81} y2={118}/><Seg x1={81} y1={118} x2={84} y2={140}/>
+      </g>
+      <Arr x1={125} y1={80} x2={148} y2={80} color={PK}/>
+      {/* RIGHT: wall sit — back on wall, thighs parallel */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={48} r={9}/>
+        {/* back against wall */}
+        <Seg x1={210} y1={57} x2={210} y2={98}/>
+        <Seg x1={210} y1={70} x2={190} y2={80}/><Seg x1={210} y1={70} x2={230} y2={80}/>
+        {/* thighs horizontal */}
+        <Seg x1={202} y1={98} x2={182} y2={98}/><Seg x1={182} y1={98} x2={175} y2={140}/>
+        <Seg x1={218} y1={98} x2={238} y2={98}/><Seg x1={238} y1={98} x2={245} y2={140}/>
+      </g>
+      <Cue x={210} y={156} text="thighs parallel — back flat on wall"/>
+    </svg>
+  ),
+
+  "Single-Leg Calf Raise": ()=>(
+    <svg viewBox="0 0 280 175" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={148}/><Divider h={160}/>
+      <FL x={70} text="flat foot — start"/><FL x={210} text="rise on one foot"/>
+      {/* LEFT faded: two feet flat */}
+      <g color="#9a7a7a" opacity={0.35}>
+        <Head cx={68} cy={38} r={9}/><Seg x1={68} y1={47} x2={68} y2={88}/>
+        <Seg x1={60} y1={88} x2={55} y2={122}/><Seg x1={55} y1={122} x2={52} y2={148}/>
+        <Seg x1={76} y1={88} x2={81} y2={122}/><Seg x1={81} y1={122} x2={84} y2={148}/>
+        <Seg x1={68} y1={60} x2={48} y2={72}/><Seg x1={68} y1={60} x2={88} y2={72}/>
+        <Seg x1={40} y1={148} x2={58} y2={148}/><Seg x1={76} y1={148} x2={94} y2={148}/>
+      </g>
+      <Arr x1={125} y1={100} x2={148} y2={100} color={PK}/>
+      {/* RIGHT: single leg raised, other bent back */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={24} r={9}/><Seg x1={210} y1={33} x2={210} y2={74}/>
+        <Seg x1={202} y1={74} x2={196} y2={110}/><Seg x1={196} y1={110} x2={192} y2={134}/>
+        <Seg x1={218} y1={74} x2={225} y2={108}/><Seg x1={225} y1={108} x2={232} y2={128}/>
+        <Seg x1={210} y1={46} x2={190} y2={58}/><Seg x1={210} y1={46} x2={230} y2={58}/>
+        {/* toe on floor, heel lifted */}
+        <Seg x1={192} y1={134} x2={200} y2={148}/>
+        {/* other leg tucked back */}
+        <Seg x1={232} y1={128} x2={242} y2={118}/>
+      </g>
+      <line x1={184} y1={148} x2={192} y2={134} stroke={PK} strokeWidth={1.4} strokeDasharray="3 2"/>
+      <Arr x1={268} y1={100} x2={268} y2={72} color={PK}/>
+      <Cue x={210} y={165} text="hold wall for balance"/>
+    </svg>
+  ),
+
+  "Squat to Chair": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="lower slowly"/><FL x={210} text="stand with control"/>
+      {/* chair shape */}
+      <rect x={98} y={105} width={36} height={6} rx={2} fill="rgba(212,116,138,0.18)" stroke={PK} strokeWidth={1} strokeOpacity={0.4}/>
+      <Seg x1={100} y1={111} x2={98} y2={140}/><Seg x1={132} y1={111} x2={134} y2={140}/>
+      {/* LEFT: mid-descent */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={68} cy={45} r={9}/><Seg x1={68} y1={54} x2={68} y2={88}/>
+        <Seg x1={68} y1={65} x2={48} y2={80}/><Seg x1={68} y1={65} x2={88} y2={80}/>
+        <Seg x1={60} y1={88} x2={52} y2={110}/><Seg x1={52} y1={110} x2={48} y2={140}/>
+        <Seg x1={76} y1={88} x2={88} y2={110}/><Seg x1={88} y1={110} x2={92} y2={140}/>
+      </g>
+      <Arr x1={68} y1={80} x2={68} y2={95} color={PK}/>
+      <Arr x1={148} y1={88} x2={160} y2={88} color={PK}/>
+      {/* RIGHT: standing back up */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={28} r={9}/><Seg x1={210} y1={37} x2={210} y2={80}/>
+        <Seg x1={210} y1={52} x2={190} y2={65}/><Seg x1={210} y1={52} x2={230} y2={65}/>
+        <Seg x1={202} y1={80} x2={196} y2={118}/><Seg x1={196} y1={118} x2={192} y2={140}/>
+        <Seg x1={218} y1={80} x2={224} y2={118}/><Seg x1={224} y1={118} x2={228} y2={140}/>
+      </g>
+      <Arr x1={210} y1={75} x2={210} y2={58} color={PK}/>
+      <Cue x={140} y={156} text="slow down, drive through heels up"/>
+    </svg>
+  ),
+
+  "Wall Push-Up": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="arms extended"/><FL x={210} text="lower to wall"/>
+      {/* walls */}
+      <line x1={112} y1={10} x2={112} y2={140} stroke={PK} strokeWidth={3} strokeOpacity={0.15}/>
+      <line x1={252} y1={10} x2={252} y2={140} stroke={PK} strokeWidth={3} strokeOpacity={0.15}/>
+      {/* LEFT: arms straight, standing angled */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={58} cy={40} r={9}/><Seg x1={58} y1={49} x2={60} y2={92}/>
+        <Seg x1={60} y1={65} x2={78} y2={75}/><Seg x1={78} y1={75} x2={112} y2={72}/>
+        <Seg x1={60} y1={65} x2={42} y2={80}/>
+        <Seg x1={52} y1={92} x2={46} y2={140}/><Seg x1={68} y1={92} x2={74} y2={140}/>
+      </g>
+      <Arr x1={148} y1={72} x2={160} y2={72} color={PK}/>
+      {/* RIGHT: elbows bent, chest close */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={198} cy={40} r={9}/><Seg x1={198} y1={49} x2={200} y2={92}/>
+        <Seg x1={200} y1={65} x2={222} y2={68}/><Seg x1={222} y1={68} x2={252} y2={78}/>
+        <Seg x1={200} y1={65} x2={182} y2={78}/>
+        <Seg x1={192} y1={92} x2={186} y2={140}/><Seg x1={208} y1={92} x2={214} y2={140}/>
+      </g>
+      <Cue x={140} y={156} text="elbows track back — not out"/>
+    </svg>
+  ),
+
+  "Standing Hip Hinge": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="standing tall"/><FL x={210} text="hinge at hips"/>
+      {/* LEFT: upright */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={68} cy={25} r={9}/><Seg x1={68} y1={34} x2={68} y2={80}/>
+        <Seg x1={68} y1={50} x2={48} y2={64}/><Seg x1={68} y1={50} x2={88} y2={64}/>
+        <Seg x1={60} y1={80} x2={55} y2={118}/><Seg x1={55} y1={118} x2={52} y2={140}/>
+        <Seg x1={76} y1={80} x2={81} y2={118}/><Seg x1={81} y1={118} x2={84} y2={140}/>
+      </g>
+      <Arr x1={125} y1={68} x2={148} y2={68} color={PK}/>
+      {/* RIGHT: hinged, torso ~45° */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={172} cy={55} r={9}/>
+        <Seg x1={180} y1={60} x2={218} y2={88}/>
+        <Seg x1={190} y1={68} x2={178} y2={82}/><Seg x1={196} y1={72} x2={210} y2={82}/>
+        <Seg x1={218} y1={88} x2={212} y2={118}/><Seg x1={212} y1={118} x2={208} y2={140}/>
+        <Seg x1={224} y1={90} x2={232} y2={118}/><Seg x1={232} y1={118} x2={236} y2={140}/>
+      </g>
+      <Arr x1={172} y1={62} x2={164} y2={52} color={PK}/>
+      <Cue x={195} y={56} text="flat back"/>
+      <Cue x={140} y={156} text="push hips back — not knees forward"/>
+    </svg>
+  ),
+
+  "Standing Hip Flexor March": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="standing"/><FL x={210} text="knee drives up"/>
+      {/* LEFT: upright */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={68} cy={25} r={9}/><Seg x1={68} y1={34} x2={68} y2={80}/>
+        <Seg x1={68} y1={50} x2={48} y2={64}/><Seg x1={68} y1={50} x2={88} y2={64}/>
+        <Seg x1={60} y1={80} x2={55} y2={118}/><Seg x1={55} y1={118} x2={52} y2={140}/>
+        <Seg x1={76} y1={80} x2={81} y2={118}/><Seg x1={81} y1={118} x2={84} y2={140}/>
+      </g>
+      <Arr x1={125} y1={80} x2={148} y2={80} color={PK}/>
+      {/* RIGHT: one knee driven to hip height */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={25} r={9}/><Seg x1={210} y1={34} x2={210} y2={80}/>
+        <Seg x1={210} y1={50} x2={190} y2={64}/><Seg x1={210} y1={50} x2={230} y2={64}/>
+        {/* standing leg */}
+        <Seg x1={202} y1={80} x2={198} y2={118}/><Seg x1={198} y1={118} x2={194} y2={140}/>
+        {/* lifted leg — knee at hip */}
+        <Seg x1={218} y1={80} x2={230} y2={60}/><Seg x1={230} y1={60} x2={242} y2={80}/>
+      </g>
+      <Arr x1={230} y1={65} x2={230} y2={48} color={PK}/>
+      <Cue x={140} y={156} text="hold 1 sec at top, stand tall"/>
+    </svg>
+  ),
+
+  "Seated Thoracic Rotation": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="sitting tall"/><FL x={210} text="rotate upper back"/>
+      {/* LEFT: seated, neutral */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={68} cy={35} r={9}/><Seg x1={68} y1={44} x2={68} y2={88}/>
+        <Seg x1={68} y1={60} x2={48} y2={72}/><Seg x1={68} y1={60} x2={88} y2={72}/>
+        <Seg x1={60} y1={88} x2={50} y2={115}/><Seg x1={76} y1={88} x2={86} y2={115}/>
+        <line x1={40} y1={115} x2={96} y2={115} stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round"/>
+      </g>
+      <Arr x1={125} y1={68} x2={148} y2={68} color={PK}/>
+      {/* RIGHT: torso rotated */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={202} cy={35} r={9}/>
+        <Seg x1={208} y1={44} x2={212} y2={88}/>
+        {/* rotated shoulders */}
+        <Seg x1={195} y1={62} x2={230} y2={58}/>
+        <Seg x1={195} y1={62} x2={182} y2={76}/><Seg x1={230} y1={58} x2={242} y2={68}/>
+        <Seg x1={204} y1={88} x2={194} y2={115}/><Seg x1={220} y1={88} x2={230} y2={115}/>
+        <line x1={184} y1={115} x2={240} y2={115} stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round"/>
+      </g>
+      <Arr x1={230} y1={55} x2={240} y2={45} color={PK}/>
+      <Cue x={210} y={135} text="rotate from upper back"/>
+      <Cue x={140} y={156} text="hips stay still — 8 each side"/>
+    </svg>
+  ),
+
+  "Supine Spinal Twist": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="knees stacked"/><FL x={210} text="knees drop to side"/>
+      {/* LEFT: lying, knees up center */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={28} cy={110} r={9}/><Seg x1={37} y1={110} x2={88} y2={112}/>
+        <Seg x1={52} y1={111} x2={48} y2={130}/>
+        <Seg x1={88} y1={112} x2={105} y2={95}/><Seg x1={105} y1={95} x2={115} y2={112}/>
+        <Seg x1={96} y1={112} x2={113} y2={95}/><Seg x1={113} y1={95} x2={123} y2={112}/>
+        {/* arm out */}
+        <Seg x1={48} y1={111} x2={28} y2={103}/>
+      </g>
+      <Arr x1={148} y1={100} x2={160} y2={100} color={PK}/>
+      {/* RIGHT: knees dropped right, arm reaching left */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={168} cy={110} r={9}/><Seg x1={177} y1={110} x2={228} y2={112}/>
+        <Seg x1={192} y1={111} x2={188} y2={130}/>
+        {/* knees dropped to side */}
+        <Seg x1={228} y1={112} x2={248} y2={125}/><Seg x1={248} y1={125} x2={262} y2={140}/>
+        <Seg x1={238} y1={114} x2={255} y2={128}/><Seg x1={255} y1={128} x2={268} y2={140}/>
+        {/* arm reaching opposite way */}
+        <Seg x1={188} y1={111} x2={162} y2={100}/>
+      </g>
+      <Arr x1={245} y1={120} x2={256} y2={130} color={PK}/>
+      <Cue x={210} y={156} text="breathe into the twist — 30 sec each side"/>
+    </svg>
+  ),
+
+  // ─── PHASE 2 NEW ─────────────────────────────────────────────────────
+  "Plank Hold": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="forearm plank"/><FL x={210} text="neutral spine — hold"/>
+      {/* LEFT faded: setup */}
+      <g color="#9a7a7a" opacity={0.4}>
+        <Head cx={22} cy={82} r={9}/>
+        <Seg x1={31} y1={82} x2={95} y2={90}/>
+        <Seg x1={40} y1={85} x2={36} y2={108}/>
+        <Seg x1={88} y1={89} x2={85} y2={112}/>
+        <Seg x1={95} y1={90} x2={118} y2={95}/><Seg x1={118} y1={95} x2={124} y2={120}/>
+        <Seg x1={105} y1={92} x2={128} y2={96}/><Seg x1={128} y1={96} x2={134} y2={120}/>
+      </g>
+      <Arr x1={148} y1={92} x2={160} y2={92} color={PK}/>
+      {/* RIGHT: full plank hold */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={162} cy={82} r={9}/>
+        <Seg x1={171} y1={82} x2={235} y2={90}/>
+        <Seg x1={180} y1={85} x2={176} y2={108}/>
+        <Seg x1={228} y1={89} x2={225} y2={112}/>
+        <Seg x1={235} y1={90} x2={258} y2={95}/><Seg x1={258} y1={95} x2={264} y2={120}/>
+        <Seg x1={245} y1={92} x2={268} y2={96}/><Seg x1={268} y1={96} x2={274} y2={120}/>
+      </g>
+      {/* alignment arrow */}
+      <line x1={162} y1={82} x2={264} y2={90} stroke={PK} strokeWidth={1} strokeOpacity={0.3} strokeDasharray="3 2"/>
+      <Cue x={210} y={130} text="straight line — head to heels"/>
+      <Cue x={140} y={156} text="breathe steadily — don't hold breath"/>
+    </svg>
+  ),
+
+  "Side Plank": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="setup — on forearm"/><FL x={210} text="hips lifted — hold"/>
+      {/* LEFT faded: hip on floor */}
+      <g color="#9a7a7a" opacity={0.4}>
+        <Head cx={22} cy={100} r={9}/>
+        <Seg x1={31} y1={100} x2={100} y2={105}/>
+        <Seg x1={42} y1={102} x2={38} y2={120}/>
+        <Seg x1={100} y1={105} x2={130} y2={108}/><Seg x1={130} y1={108} x2={136} y2={130}/>
+        <Seg x1={110} y1={106} x2={138} y2={109}/><Seg x1={138} y1={109} x2={144} y2={130}/>
+      </g>
+      <Arr x1={148} y1={105} x2={160} y2={105} color={PK}/>
+      {/* RIGHT: hip lifted — diagonal */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={162} cy={80} r={9}/>
+        <Seg x1={171} y1={80} x2={230} y2={98}/>
+        <Seg x1={182} y1={84} x2={178} y2={108}/>
+        {/* top arm raised */}
+        <Seg x1={195} y1={88} x2={195} y2={68}/>
+        <Seg x1={230} y1={98} x2={258} y2={108}/><Seg x1={258} y1={108} x2={264} y2={130}/>
+        <Seg x1={240} y1={100} x2={266} y2={110}/><Seg x1={266} y1={110} x2={272} y2={130}/>
+      </g>
+      <Arr x1={195} y1={72} x2={195} y2={58} color={PK}/>
+      <Cue x={195} y={54} text="arm up"/>
+      <Cue x={210} y={148} text="stack hips — don't let them sag"/>
+    </svg>
+  ),
+
+  "Seated Leg Lowering": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="legs up — 90°"/><FL x={210} text="lower one leg slowly"/>
+      {/* LEFT: lying, legs vertical */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={28} cy={120} r={9}/><Seg x1={37} y1={120} x2={92} y2={122}/>
+        <Seg x1={52} y1={121} x2={48} y2={138}/>
+        <Seg x1={92} y1={122} x2={98} y2={90}/><Seg x1={98} y1={90} x2={104} y2={122}/>
+        <Seg x1={100} y1={122} x2={106} y2={90}/><Seg x1={106} y1={90} x2={112} y2={122}/>
+      </g>
+      <Arr x1={148} y1={100} x2={160} y2={100} color={PK}/>
+      {/* RIGHT: one leg lowered, one stays up */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={168} cy={120} r={9}/><Seg x1={177} y1={120} x2={232} y2={122}/>
+        <Seg x1={192} y1={121} x2={188} y2={138}/>
+        {/* leg stays up */}
+        <Seg x1={232} y1={122} x2={238} y2={90}/><Seg x1={238} y1={90} x2={244} y2={122}/>
+        {/* leg lowered — nearly flat */}
+        <Seg x1={240} y1={122} x2={265} y2={118}/><Seg x1={265} y1={118} x2={272} y2={138}/>
+      </g>
+      <Arr x1={260} y1={112} x2={265} y2={125} color={PK}/>
+      <Cue x={210} y={155} text="lower back presses down — slow"/>
+    </svg>
+  ),
+
+  "Reverse Lunge": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="standing"/><FL x={210} text="step back — lower"/>
+      {/* LEFT faded */}
+      <g color="#9a7a7a" opacity={0.4}>
+        <Head cx={68} cy={25} r={9}/><Seg x1={68} y1={34} x2={68} y2={78}/>
+        <Seg x1={68} y1={50} x2={48} y2={64}/><Seg x1={68} y1={50} x2={88} y2={64}/>
+        <Seg x1={60} y1={78} x2={55} y2={115}/><Seg x1={55} y1={115} x2={52} y2={140}/>
+        <Seg x1={76} y1={78} x2={81} y2={115}/><Seg x1={81} y1={115} x2={84} y2={140}/>
+      </g>
+      <Arr x1={125} y1={80} x2={148} y2={80} color={PK}/>
+      {/* RIGHT: rear lunge */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={195} cy={38} r={9}/><Seg x1={195} y1={47} x2={196} y2={88}/>
+        <Seg x1={196} y1={62} x2={176} y2={75}/><Seg x1={196} y1={62} x2={216} y2={75}/>
+        {/* front leg — bent */}
+        <Seg x1={188} y1={88} x2={182} y2={112}/><Seg x1={182} y1={112} x2={178} y2={140}/>
+        {/* back leg — long stride back, knee near floor */}
+        <Seg x1={204} y1={88} x2={232} y2={112}/><Seg x1={232} y1={112} x2={238} y2={140}/>
+      </g>
+      <Arr x1={204} y1={85} x2={216} y2={98} color={PK}/>
+      <Cue x={182} y={155} text="front shin vertical"/>
+    </svg>
+  ),
+
+  "Bicycle Crunch (slow)": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="start"/><FL x={210} text="rotate — elbow to knee"/>
+      {/* LEFT: lying, hands behind head */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={28} cy={115} r={9}/><Seg x1={37} y1={115} x2={92} y2={118}/>
+        <Seg x1={52} y1={116} x2={48} y2={134}/>
+        {/* arms behind head */}
+        <Seg x1={42} y1={116} x2={32} y2={103}/><Seg x1={52} y1={116} x2={56} y2={103}/>
+        {/* legs — knees bent up */}
+        <Seg x1={92} y1={118} x2={108} y2={100}/><Seg x1={108} y1={100} x2={118} y2={118}/>
+        <Seg x1={100} y1={118} x2={115} y2={100}/><Seg x1={115} y1={100} x2={125} y2={118}/>
+      </g>
+      <Arr x1={148} y1={110} x2={160} y2={110} color={PK}/>
+      {/* RIGHT: rotated — right elbow to left knee */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={168} cy={115} r={9}/><Seg x1={177} y1={115} x2={230} y2={118}/>
+        <Seg x1={192} y1={116} x2={188} y2={134}/>
+        {/* arms — one extends, one behind head */}
+        <Seg x1={182} y1={116} x2={172} y2={103}/>
+        <Seg x1={192} y1={116} x2={208} y2={100}/>
+        {/* one knee in, one leg extended */}
+        <Seg x1={230} y1={118} x2={245} y2={100}/><Seg x1={245} y1={100} x2={208} y2={100}/>
+        <Seg x1={238} y1={118} x2={260} y2={126}/><Seg x1={260} y1={126} x2={272} y2={138}/>
+      </g>
+      <Cue x={210} y={155} text="rotate from thoracic — elbow drives across"/>
+    </svg>
+  ),
+
+  "Squat to Press (ball overhead)": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="squat — ball at chest"/><FL x={210} text="stand — press overhead"/>
+      {/* LEFT: squat, ball at chest */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={68} cy={55} r={9}/><Seg x1={68} y1={64} x2={68} y2={100}/>
+        <Seg x1={68} y1={78} x2={50} y2={85}/><Seg x1={50} y1={85} x2={58} y2={96}/>
+        <Seg x1={68} y1={78} x2={86} y2={85}/><Seg x1={86} y1={85} x2={78} y2={96}/>
+        <Seg x1={60} y1={100} x2={45} y2={118}/><Seg x1={45} y1={118} x2={38} y2={140}/>
+        <Seg x1={76} y1={100} x2={91} y2={118}/><Seg x1={91} y1={118} x2={98} y2={140}/>
+      </g>
+      <Ball cx={68} cy={90} r={11}/>
+      <Arr x1={125} y1={80} x2={148} y2={80} color={PK}/>
+      {/* RIGHT: standing, ball pressed overhead */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={38} r={9}/><Seg x1={210} y1={47} x2={210} y2={88}/>
+        <Seg x1={210} y1={62} x2={192} y2={52}/><Seg x1={192} y1={52} x2={188} y2={40}/>
+        <Seg x1={210} y1={62} x2={228} y2={52}/><Seg x1={228} y1={52} x2={232} y2={40}/>
+        <Seg x1={202} y1={88} x2={196} y2={120}/><Seg x1={196} y1={120} x2={192} y2={140}/>
+        <Seg x1={218} y1={88} x2={224} y2={120}/><Seg x1={224} y1={120} x2={228} y2={140}/>
+      </g>
+      <Ball cx={210} cy={22} r={11}/>
+      <Arr x1={210} y1={38} x2={210} y2={50} color={PK}/>
+      <Cue x={140} y={156} text="drive from legs — power the press"/>
+    </svg>
+  ),
+
+  // ─── PHASE 3 NEW ─────────────────────────────────────────────────────
+  "Explosive Push-Up": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="lower to floor"/><FL x={210} text="push — hands lift"/>
+      {/* LEFT: chest near floor */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={22} cy={88} r={9}/>
+        <Seg x1={31} y1={88} x2={95} y2={95}/>
+        <Seg x1={40} y1={90} x2={34} y2={112}/>
+        <Seg x1={88} y1={94} x2={82} y2={118}/>
+        <Seg x1={95} y1={95} x2={118} y2={100}/><Seg x1={118} y1={100} x2={124} y2={120}/>
+        <Seg x1={105} y1={97} x2={128} y2={102}/><Seg x1={128} y1={102} x2={134} y2={122}/>
+      </g>
+      <Arr x1={148} y1={95} x2={160} y2={95} color={PK}/>
+      {/* RIGHT: hands lifted off floor */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={162} cy={72} r={9}/>
+        <Seg x1={171} y1={72} x2={232} y2={80}/>
+        <Seg x1={180} y1={75} x2={174} y2={98}/>
+        <Seg x1={225} y1={79} x2={219} y2={102}/>
+        <Seg x1={232} y1={80} x2={255} y2={85}/><Seg x1={255} y1={85} x2={261} y2={108}/>
+        <Seg x1={242} y1={82} x2={265} y2={87}/><Seg x1={265} y1={87} x2={271} y2={110}/>
+      </g>
+      {/* lifted hands */}
+      <circle cx={174} cy={100} r={3} fill={PK} opacity={0.5}/>
+      <circle cx={219} cy={104} r={3} fill={PK} opacity={0.5}/>
+      <Arr x1={174} y1={104} x2={170} y2={116} color={PK}/>
+      <Cue x={210} y={130} text="hands leave floor at top"/>
+      <Cue x={140} y={156} text="land soft — absorb with bent arms"/>
+    </svg>
+  ),
+
+  "Ball Slam (onto mat)": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="ball overhead"/><FL x={210} text="slam to mat"/>
+      {/* LEFT: standing, ball overhead */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={68} cy={42} r={9}/><Seg x1={68} y1={51} x2={68} y2={92}/>
+        <Seg x1={68} y1={66} x2={50} y2={54}/><Seg x1={50} y1={54} x2={46} y2={42}/>
+        <Seg x1={68} y1={66} x2={86} y2={54}/><Seg x1={86} y1={54} x2={90} y2={42}/>
+        <Seg x1={60} y1={92} x2={54} y2={128}/><Seg x1={54} y1={128} x2={50} y2={140}/>
+        <Seg x1={76} y1={92} x2={82} y2={128}/><Seg x1={82} y1={128} x2={86} y2={140}/>
+      </g>
+      <Ball cx={68} cy={24} r={12}/>
+      <Arr x1={125} y1={72} x2={148} y2={72} color={PK}/>
+      {/* RIGHT: slamming down, hinged */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={195} cy={55} r={9}/>
+        <Seg x1={200} y1={64} x2={220} y2={90}/>
+        <Seg x1={206} y1={74} x2={188} y2={80}/><Seg x1={188} y1={80} x2={180} y2={92}/>
+        <Seg x1={214} y1={80} x2={232} y2={88}/><Seg x1={232} y1={88} x2={240} y2={100}/>
+        <Seg x1={220} y1={90} x2={212} y2={118}/><Seg x1={212} y1={118} x2={208} y2={140}/>
+        <Seg x1={226} y1={92} x2={236} y2={118}/><Seg x1={236} y1={118} x2={240} y2={140}/>
+      </g>
+      <Ball cx={210} cy={128} r={10}/>
+      <Arr x1={210} y1={108} x2={210} y2={120} color={PK}/>
+      <Cue x={140} y={156} text="full body — drive from hips"/>
+    </svg>
+  ),
+
+  "Lateral Hip Swing": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="swing out"/><FL x={210} text="swing across"/>
+      {/* Wall to hold */}
+      <line x1={10} y1={10} x2={10} y2={140} stroke={PK} strokeWidth={3} strokeOpacity={0.15}/>
+      {/* LEFT: leg swung outward */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={60} cy={30} r={9}/><Seg x1={60} y1={39} x2={60} y2={80}/>
+        <Seg x1={60} y1={52} x2={40} y2={64}/><Seg x1={60} y1={52} x2={80} y2={60}/>
+        {/* standing leg */}
+        <Seg x1={52} y1={80} x2={48} y2={118}/><Seg x1={48} y1={118} x2={44} y2={140}/>
+        {/* swinging leg — out to side */}
+        <Seg x1={68} y1={80} x2={100} y2={90}/><Seg x1={100} y1={90} x2={108} y2={110}/>
+      </g>
+      <Arr x1={105} y1={88} x2={115} y2={80} color={PK}/>
+      <Arr x1={148} y1={80} x2={160} y2={80} color={PK}/>
+      {/* RIGHT: same leg swung across body */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={30} r={9}/><Seg x1={210} y1={39} x2={210} y2={80}/>
+        <Seg x1={210} y1={52} x2={190} y2={64}/><Seg x1={210} y1={52} x2={230} y2={60}/>
+        {/* standing leg */}
+        <Seg x1={218} y1={80} x2={222} y2={118}/><Seg x1={222} y1={118} x2={226} y2={140}/>
+        {/* leg crossing in front */}
+        <Seg x1={202} y1={80} x2={175} y2={92}/><Seg x1={175} y1={92} x2={168} y2={112}/>
+      </g>
+      <Arr x1={175} y1={88} x2={165} y2={80} color={PK}/>
+      <Cue x={140} y={156} text="controlled swing — no momentum flopping"/>
+    </svg>
+  ),
+
+  // ─── PHASE 4 NEW ─────────────────────────────────────────────────────
+  "Split Step Practice": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="small hop"/><FL x={210} text="land — athletic ready"/>
+      {/* LEFT: small hop */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={68} cy={28} r={9}/><Seg x1={68} y1={37} x2={68} y2={78}/>
+        <Seg x1={68} y1={52} x2={48} y2={64}/><Seg x1={68} y1={52} x2={88} y2={62}/>
+        {/* both legs up slightly */}
+        <Seg x1={60} y1={78} x2={52} y2={110}/><Seg x1={52} y1={110} x2={46} y2={128}/>
+        <Seg x1={76} y1={78} x2={84} y2={110}/><Seg x1={84} y1={110} x2={90} y2={128}/>
+      </g>
+      {/* feet off ground */}
+      <Cue x={68} y={138} text="↑ in air"/>
+      <Arr x1={125} y1={80} x2={148} y2={80} color={PK}/>
+      {/* RIGHT: landed wide, knees bent */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={42} r={9}/><Seg x1={210} y1={51} x2={210} y2={92}/>
+        <Seg x1={210} y1={65} x2={190} y2={76}/><Seg x1={210} y1={65} x2={230} y2={76}/>
+        {/* wide landing, soft knees */}
+        <Seg x1={202} y1={92} x2={188} y2={112}/><Seg x1={188} y1={112} x2={180} y2={140}/>
+        <Seg x1={218} y1={92} x2={232} y2={112}/><Seg x1={232} y1={112} x2={240} y2={140}/>
+      </g>
+      <Cue x={210} y={156} text="land wide — weight on balls of feet"/>
+    </svg>
+  ),
+
+  "Forehand Drive Step": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="step out — load"/><FL x={210} text="rotate — follow through"/>
+      {/* LEFT: stepping out, coiling */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={65} cy={38} r={9}/><Seg x1={65} y1={47} x2={65} y2={88}/>
+        <Seg x1={65} y1={62} x2={44} y2={72}/><Seg x1={65} y1={62} x2={86} y2={68}/>
+        {/* wide lunge stance */}
+        <Seg x1={57} y1={88} x2={38} y2={112}/><Seg x1={38} y1={112} x2={30} y2={140}/>
+        <Seg x1={73} y1={88} x2={92} y2={112}/><Seg x1={92} y1={112} x2={98} y2={140}/>
+        {/* racket arm back */}
+        <Seg x1={86} y1={68} x2={108} y2={58}/>
+      </g>
+      <Arr x1={125} y1={75} x2={148} y2={75} color={PK}/>
+      {/* RIGHT: rotated, arm following through */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={205} cy={38} r={9}/><Seg x1={205} y1={47} x2={207} y2={88}/>
+        {/* shoulders rotated */}
+        <Seg x1={188} y1={68} x2={226} y2={62}/>
+        <Seg x1={188} y1={68} x2={168} y2={58}/>
+        {/* follow-through arm crosses body */}
+        <Seg x1={226} y1={62} x2={248} y2={50}/>
+        <Seg x1={199} y1={88} x2={182} y2={112}/><Seg x1={182} y1={112} x2={176} y2={140}/>
+        <Seg x1={215} y1={88} x2={232} y2={112}/><Seg x1={232} y1={112} x2={238} y2={140}/>
+      </g>
+      <Arr x1={240} y1={52} x2={252} y2={44} color={PK}/>
+      <Cue x={140} y={156} text="rotation starts from hips — not arm"/>
+    </svg>
+  ),
+
+  "Defensive Slide Drill": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="low stance"/><FL x={210} text="slide — no crossing feet"/>
+      {/* LEFT: defensive stance */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={65} cy={48} r={9}/><Seg x1={65} y1={57} x2={65} y2={92}/>
+        <Seg x1={65} y1={70} x2={44} y2={80}/><Seg x1={65} y1={70} x2={86} y2={80}/>
+        {/* wide low stance */}
+        <Seg x1={57} y1={92} x2={38} y2={112}/><Seg x1={38} y1={112} x2={32} y2={140}/>
+        <Seg x1={73} y1={92} x2={96} y2={112}/><Seg x1={96} y1={112} x2={102} y2={140}/>
+      </g>
+      <Cue x={65} y={135} text="wide + low"/>
+      <Arr x1={125} y1={88} x2={148} y2={88} color={PK}/>
+      {/* RIGHT: sliding step — push foot, lead foot steps */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={215} cy={48} r={9}/><Seg x1={215} y1={57} x2={213} y2={92}/>
+        <Seg x1={213} y1={70} x2={192} y2={80}/><Seg x1={213} y1={70} x2={234} y2={80}/>
+        {/* wider stance mid-slide */}
+        <Seg x1={205} y1={92} x2={178} y2={112}/><Seg x1={178} y1={112} x2={172} y2={140}/>
+        <Seg x1={221} y1={92} x2={248} y2={108}/><Seg x1={248} y1={108} x2={254} y2={140}/>
+      </g>
+      <Arr x1={270} y1={100} x2={268} y2={116} color={PK}/>
+      <Cue x={213} y={135} text="push foot drives"/>
+      <Cue x={140} y={156} text="stay low — don't stand up between steps"/>
+    </svg>
+  ),
+
+  "Tuck Step + Cross Step": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/><Divider h={152}/>
+      <FL x={70} text="tuck step — feet close"/><FL x={210} text="cross step — foot over"/>
+      {/* LEFT: tuck step — soft knees, feet together */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={65} cy={42} r={9}/><Seg x1={65} y1={51} x2={65} y2={88}/>
+        <Seg x1={65} y1={64} x2={46} y2={76}/><Seg x1={65} y1={64} x2={84} y2={74}/>
+        <Seg x1={57} y1={88} x2={50} y2={114}/><Seg x1={50} y1={114} x2={46} y2={140}/>
+        <Seg x1={73} y1={88} x2={78} y2={112}/><Seg x1={78} y1={112} x2={80} y2={140}/>
+      </g>
+      <circle cx={46} cy={140} r={3} fill={PK} opacity={0.5}/>
+      <circle cx={80} cy={140} r={3} fill={PK} opacity={0.5}/>
+      <Cue x={63} y={156} text="feet close"/>
+      <Arr x1={125} y1={88} x2={148} y2={88} color={PK}/>
+      {/* RIGHT: cross step — one foot crosses in front of the other */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={215} cy={42} r={9}/><Seg x1={215} y1={51} x2={213} y2={88}/>
+        <Seg x1={213} y1={64} x2={194} y2={76}/><Seg x1={213} y1={64} x2={232} y2={74}/>
+        <Seg x1={221} y1={88} x2={236} y2={112}/><Seg x1={236} y1={112} x2={244} y2={140}/>
+        <Seg x1={205} y1={88} x2={190} y2={112}/><Seg x1={190} y1={112} x2={182} y2={140}/>
+      </g>
+      <circle cx={244} cy={140} r={3} fill={PK} opacity={0.5}/>
+      <circle cx={182} cy={140} r={3} fill={PK} opacity={0.5}/>
+      <Arr x1={186} y1={136} x2={196} y2={130} color={PK}/>
+      <Cue x={210} y={156} text="cross in front — stay low and quick"/>
+    </svg>
+  ),
+
+  "Box Run (4 corners)": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <FL x={140} y={14} text="sprint each corner of a 6ft box"/>
+      {/* box outline */}
+      <rect x={70} y={25} width={140} height={110} rx={4} fill="none" stroke={PK} strokeWidth={1.2} strokeOpacity={0.3} strokeDasharray="5 3"/>
+      {/* corner dots */}
+      {[[70,25],[210,25],[210,135],[70,135]].map(([x,y],i)=>(
+        <circle key={i} cx={x} cy={y} r={5} fill={PK} opacity={0.5}/>
+      ))}
+      {/* number labels */}
+      <Cue x={58} y={22} text="1" anchor="end"/>
+      <Cue x={222} y={22} text="2" anchor="start"/>
+      <Cue x={222} y={138} text="3" anchor="start"/>
+      <Cue x={58} y={138} text="4" anchor="end"/>
+      {/* running arrow path */}
+      <path d="M72,27 L208,27" stroke={PK} strokeWidth={2} strokeOpacity={0.6} fill="none" markerEnd="none"/>
+      <Arr x1={72} y1={27} x2={205} y2={27} color={PK}/>
+      <Arr x1={208} y1={28} x2={208} y2={132} color={PK}/>
+      <Arr x1={207} y1={133} x2={73} y2={133} color={PK}/>
+      <Arr x1={72} y1={132} x2={72} y2={30} color={PK}/>
+      {/* runner figure in center */}
+      <g color="#9a7a7a" opacity={0.7}>
+        <Head cx={140} cy={65} r={9}/><Seg x1={140} y1={74} x2={140} y2={102}/>
+        <Seg x1={140} y1={84} x2={122} y2={94}/><Seg x1={140} y1={84} x2={158} y2={94}/>
+        <Seg x1={132} y1={102} x2={118} y2={118}/><Seg x1={148} y1={102} x2={155} y2={118}/>
+      </g>
+      <Cue x={140} y={155} text="sprint each side — change direction fast"/>
+    </svg>
+  ),
 };
 
 // Fallback
@@ -1666,6 +2670,7 @@ function ExerciseTimer({seconds}){
 
   function start(){
     if(done){ setTimeLeft(seconds);setDone(false); }
+    SFX.tap();
     setRunning(true);
   }
   function pause(){ setRunning(false); }
@@ -1674,7 +2679,7 @@ function ExerciseTimer({seconds}){
   useEffect(()=>{
     if(running&&timeLeft>0){
       intervalRef.current=setInterval(()=>setTimeLeft(v=>{
-        if(v<=1){ setRunning(false);setDone(true);return 0; }
+        if(v<=1){ setRunning(false);setDone(true);SFX.timerDone();return 0; }
         return v-1;
       }),1000);
     }
@@ -1744,10 +2749,21 @@ function WorkoutModal({workout,onClose,onComplete,isRepeat}){
     <div style={OV}><div style={{...MB,textAlign:"center",padding:"40px 28px"}}>
       <div style={{fontSize:52,marginBottom:10}}>✨</div>
       <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.rose,fontStyle:"italic"}}>Beautifully Done</div>
-      <div style={{color:C.muted,margin:"8px 0 6px",fontSize:13}}>
+      <div style={{color:C.muted,margin:"8px 0 4px",fontSize:13}}>
         You earned <span style={{color:C.rose,fontWeight:600}}>+{xpEarned} xp</span>
         {isRepeat&&<span style={{color:C.muted,fontSize:11}}> (repeat bonus)</span>}
       </div>
+      {(()=>{
+        const lines = {
+          1: ["You listened. That’s the whole first chapter.","The ache had no answer for this.","Breath by breath. Rep by rep. This is how it starts.","The foundation is forming. You can’t feel it yet. But it’s there."],
+          2: ["The sloth whispered today. You moved anyway.","Stronger than yesterday. That’s the only metric that matters.","You’re building something real now. It shows.","The comfort of stillness never stood a chance against you."],
+          3: ["The drake saw that. It’s getting nervous.","Explosive. Powerful. More yourself every session.","You’re not getting back to who you were. You’re becoming someone better.","Doubt asked if you were ready. Your body just answered."],
+          4: ["The court is so close now. She can feel it.","That’s a champion’s session. Full stop.","The phantom had nothing on what you just did.","You didn’t come this far to slow down now."],
+        };
+        const phaseLines = lines[workout.phase] || lines[1];
+        const line = phaseLines[Math.floor((Date.now()/1000) % phaseLines.length)];
+        return <div style={{fontSize:13,color:C.rose,fontStyle:"italic",margin:"8px 0 4px",lineHeight:1.6,opacity:0.85}}>{line}</div>;
+      })()}
       {!isRepeat&&(
         <div style={{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap",marginBottom:20}}>
           {Object.entries(workout.statGains).map(([k,v])=>(
@@ -1757,7 +2773,7 @@ function WorkoutModal({workout,onClose,onComplete,isRepeat}){
           ))}
         </div>
       )}
-      <button className="btn-primary" style={{width:"100%",marginTop:isRepeat?20:0}} onClick={()=>{onComplete(workout,isRepeat);onClose();}}>Collect & Return ✦</button>
+      <button className="btn-primary" style={{width:"100%",marginTop:isRepeat?20:0}} onClick={()=>{ SFX.xp(); onComplete(workout,isRepeat); onClose(); }}>Collect & Return ✦</button>
     </div></div>
   );
 
@@ -1782,7 +2798,7 @@ function WorkoutModal({workout,onClose,onComplete,isRepeat}){
           </div>
         ))}
       </div>
-      <button className="btn-primary" style={{width:"100%"}} onClick={()=>setStep(0)}>Begin ✦</button>
+      <button className="btn-primary" style={{width:"100%"}} onClick={()=>{ SFX.begin(); setStep(0); }}>Begin ✦</button>
     </div></div>
   );
 
@@ -1801,7 +2817,7 @@ function WorkoutModal({workout,onClose,onComplete,isRepeat}){
       {timerSecs&&<ExerciseTimer key={`${workout.id}-${step}`} seconds={timerSecs}/>}
       <div style={{display:"flex",gap:8}}>
         {step>0&&<button className="btn-soft" style={{flex:1}} onClick={()=>setStep(s=>s-1)}>← Back</button>}
-        <button className="btn-primary" style={{flex:2}} onClick={()=>step<workout.exercises.length-1?setStep(s=>s+1):setDone(true)}>
+        <button className="btn-primary" style={{flex:2}} onClick={()=>{ if(step<workout.exercises.length-1){ SFX.tap(); setStep(s=>s+1); } else { SFX.complete(); setDone(true); } }}>
           {step<workout.exercises.length-1?"Next ✦":"Finish ✨"}
         </button>
       </div>
@@ -1851,12 +2867,14 @@ function BossModal({boss,onClose,onDefeat,charStats,learnedSkills}){
     const playerDmg = Math.max(1, base + statBonus + Math.floor(Math.random()*6));
     const newBossHp = Math.max(0, bossHp - playerDmg);
     setBossHp(newBossHp);
+    if(isWeak) SFX.weakHit(); else SFX.hit();
 
     const hitLabel = isWeak ? `✨ WEAKNESS HIT! ${type} — ${playerDmg} dmg!` : `${type} — ${playerDmg} dmg`;
 
     if(newBossHp<=0){
       setLog(prev=>[hitLabel,"💀 Boss defeated!","🎉 Victory!",...prev.slice(0,2)]);
       setWon(true);
+      SFX.bossWin();
       return;
     }
 
@@ -1867,6 +2885,7 @@ function BossModal({boss,onClose,onDefeat,charStats,learnedSkills}){
     const newPlayerHp = Math.max(0, playerHp - actualBossDmg);
     setPlayerHp(newPlayerHp);
     triggerShake();
+    SFX.damage();
 
     const shieldNote = hasManaVeil ? " (Mana Veil halved!)" : "";
     setLog(prev=>[
@@ -1875,7 +2894,7 @@ function BossModal({boss,onClose,onDefeat,charStats,learnedSkills}){
       ...prev.slice(0,2)
     ]);
 
-    if(newPlayerHp<=0){ setLost(true); }
+    if(newPlayerHp<=0){ SFX.bossLose(); setLost(true); }
   }
 
   const bossHpPct   = (bossHp/boss.maxHp)*100;
@@ -1886,11 +2905,21 @@ function BossModal({boss,onClose,onDefeat,charStats,learnedSkills}){
     <div style={OV}><div style={{...MB,textAlign:"center",padding:"36px 28px"}}>
       <div style={{fontSize:52,marginBottom:8}}>🎉</div>
       <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,color:C.rose,fontStyle:"italic"}}>Victory, Darling!</div>
-      <div style={{color:C.muted,fontSize:13,margin:"8px 0 6px"}}>{boss.name} has been defeated.</div>
-      <div style={{fontSize:12,color:C.muted,marginBottom:20}}>You finished with <span style={{color:C.sage,fontWeight:600}}>{playerHp} HP</span> remaining.</div>
-      <div style={{background:"rgba(255,235,235,0.8)",border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:20}}>
+      {boss.victory&&(
+        <div style={{textAlign:"left",margin:"12px 0 10px"}}>
+          {boss.victory.split("\n\n").map((para,i)=>(
+            <p key={i} style={{fontSize:13,color:C.text,lineHeight:1.85,
+              fontStyle:"italic",opacity:0.88,margin:"0 0 10px"}}>
+              {para}
+            </p>
+          ))}
+        </div>
+      )}
+      <div style={{fontSize:12,color:C.muted,marginBottom:16}}>Finished with <span style={{color:C.sage,fontWeight:600}}>{playerHp} HP</span> remaining.</div>
+      <div style={{background:"rgba(255,235,235,0.8)",border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:8}}>
         <div style={{fontSize:14,color:C.rose,fontWeight:600}}>+{boss.xpReward} XP earned ✦</div>
       </div>
+      <div style={{fontSize:11,color:C.lavender,marginBottom:20,fontStyle:"italic"}}>✦ A loot drop awaits…</div>
       <button className="btn-primary" style={{width:"100%"}} onClick={()=>{onDefeat(boss);onClose();}}>Claim Victory ✦</button>
     </div></div>
   );
@@ -1918,6 +2947,11 @@ function BossModal({boss,onClose,onDefeat,charStats,learnedSkills}){
         <div style={{textAlign:"center",marginBottom:12}}>
           <div style={{fontSize:40,marginBottom:2}}>{boss.icon}</div>
           <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:20,color:C.text}}>{boss.name}</div>
+          {boss.taunt&&(
+            <div style={{fontSize:11,color:C.rose,fontStyle:"italic",marginTop:4,opacity:0.75,padding:"0 8px"}}>
+              {boss.taunt}
+            </div>
+          )}
         </div>
 
         {/* Boss HP */}
@@ -1997,6 +3031,7 @@ function App(){
   const [xp,           setXp]           =useState(saved?.xp||0);
   const [completedIds, setCompletedIds] =useState(saved?.completedIds||[]);
   const [streak,       setStreak]       =useState(saved?.streak||0);
+  const [lastWorkoutDate,setLastWorkoutDate]=useState(saved?.lastWorkoutDate||null);
   const [totalWorkouts,setTotalWorkouts]=useState(saved?.totalWorkouts||0);
   const [achievements, setAchievements] =useState(saved?.achievements||[]);
   const [questProgress,setQuestProgress]=useState(saved?.questProgress||{workouts:0,mobility:0,bike:0});
@@ -2008,9 +3043,32 @@ function App(){
   const [tab,          setTab]          =useState("home");
   const [activeWorkout,setActiveWorkout]=useState(null);
   const [activeBoss,   setActiveBoss]   =useState(null);
+  const [bossStory,    setBossStory]    =useState(null);  // boss whose story is being shown
+  const [lootDrop,     setLootDrop]     =useState(null);  // gear item just dropped
   const [justEarned,   setJustEarned]   =useState(null);
   const [filter,       setFilter]       =useState("All");
   const [saveStatus,   setSaveStatus]   =useState(null);
+  const [restedToday,  setRestedToday]  =useState(saved?.restedToday||null);
+
+  // ── Streak: check on mount if a day was missed ──────────────────────────
+  useEffect(()=>{
+    if(!lastWorkoutDate) return;
+    const today = new Date().toDateString();
+    const last  = new Date(lastWorkoutDate).toDateString();
+    if(today===last) return; // already worked out today, streak intact
+    const diffMs  = new Date(today) - new Date(last);
+    const diffDays = Math.round(diffMs / 86400000);
+    if(diffDays > 1){
+      // missed at least one full day — check Iron Will protection
+      const hasIronWill = learnedSkills.includes("Iron Will");
+      if(hasIronWill && diffDays===2){
+        // Iron Will protects one missed day, remove the skill after use
+        setLearnedSkills(prev=>prev.filter(s=>s!=="Iron Will"));
+      } else {
+        setStreak(0);
+      }
+    }
+  },[]); // run once on mount
 
   const phase=getPhase(xp);
   const cls=CLASSES.find(c=>c.id===charClass)||CLASSES[0];
@@ -2018,7 +3076,7 @@ function App(){
 
   useEffect(()=>{
     if(!charClass) return;
-    const ok=save({charClass,xp,completedIds,streak,totalWorkouts,achievements,questProgress,defeatedBosses,unlockedGear,abilityPts,learnedSkills,charStats});
+    const ok=save({charClass,xp,completedIds,streak,lastWorkoutDate,restedToday,totalWorkouts,achievements,questProgress,defeatedBosses,unlockedGear,abilityPts,learnedSkills,charStats});
     setSaveStatus(ok?"saved":"error");
     const t=setTimeout(()=>setSaveStatus(null),2000);
     return()=>clearTimeout(t);
@@ -2029,15 +3087,29 @@ function App(){
     ACHIEVEMENTS.forEach(a=>{
       if(!achievements.includes(a.id)&&a.condition(stats)){
         setAchievements(prev=>[...prev,a.id]);
-        setJustEarned(a);setTimeout(()=>setJustEarned(null),3500);
+        // For phase achievements, show the chapter banner instead of generic toast
+        const phaseAchMap = {phase2:2, phase3:3, phase4:4};
+        const phaseId = phaseAchMap[a.id];
+        if(phaseId){
+          const newPhase = PHASES.find(p=>p.id===phaseId);
+          if(newPhase) {
+            setJustEarned({...a, chapterTitle: newPhase.chapter, tagline: newPhase.tagline});
+          } else {
+            setJustEarned(a);
+          }
+        } else {
+          setJustEarned(a);
+        }
+        SFX.achievement(); setTimeout(()=>setJustEarned(null),5000);
       }
     });
   },[xp,streak,totalWorkouts,defeatedBosses,unlockedGear]);
 
   useEffect(()=>{
     GEAR_UNLOCKS.forEach(g=>{
-      if(!unlockedGear.includes(g.phase)&&xp>=PHASES.find(p=>p.id===g.phase)?.xpNeeded){
-        setUnlockedGear(prev=>[...prev,g.phase]);
+      if(g.source!=="phase") return;
+      if(!unlockedGear.includes(g.id)&&xp>=PHASES.find(p=>p.id===g.phase)?.xpNeeded){
+        setUnlockedGear(prev=>[...prev,g.id]);
       }
     });
   },[xp]);
@@ -2052,7 +3124,21 @@ function App(){
       setCompletedIds(prev=>[...prev,workout.id]);
       setCharStats(prev=>{const n={...prev};Object.entries(gains).forEach(([k,v])=>{n[k]=(n[k]||0)+v;});return n;});
     }
-    setStreak(v=>v+1);
+    // ── Real date streak logic ───────────────────────────────────────────
+    const today = new Date().toDateString();
+    setLastWorkoutDate(today);
+    if(!lastWorkoutDate){
+      setStreak(1);
+    } else {
+      const last = new Date(lastWorkoutDate).toDateString();
+      if(last === today){
+        // already worked out today — don't double-count streak
+      } else {
+        const diffMs = new Date(today) - new Date(last);
+        const diffDays = Math.round(diffMs / 86400000);
+        setStreak(v => diffDays <= 1 ? v+1 : 1); // consecutive = extend, gap = reset to 1
+      }
+    }
     setTotalWorkouts(v=>v+1);
     if((totalWorkouts+1)%3===0) setAbilityPts(v=>v+1);
     setQuestProgress(prev=>({
@@ -2065,11 +3151,37 @@ function App(){
   function handleBossDefeat(boss){
     setDefeatedBosses(prev=>[...prev,boss.id]);
     setXp(v=>v+boss.xpReward);
+    if(boss.loot&&boss.loot.length>0){
+      const drop = boss.loot[Math.floor(Math.random()*boss.loot.length)];
+      if(!unlockedGear.includes(drop)){
+        setUnlockedGear(prev=>[...prev,drop]);
+        const gearItem = GEAR_UNLOCKS.find(g=>g.id===drop);
+        if(gearItem){ setLootDrop(gearItem); setTimeout(()=>setLootDrop(null),5000); }
+      }
+    }
+  }
+
+  function handleRestDay(){
+    const today = new Date().toDateString();
+    if(restedToday === today) return; // already rested today
+    // Counts as an active day — extends streak same as a workout day
+    setLastWorkoutDate(today);
+    setRestedToday(today);
+    if(!lastWorkoutDate){
+      setStreak(1);
+    } else {
+      const last = new Date(lastWorkoutDate).toDateString();
+      if(last !== today){
+        const diffDays = Math.round((new Date(today)-new Date(last))/86400000);
+        setStreak(v => diffDays <= 1 ? v+1 : 1);
+      }
+    }
   }
 
   function learnSkill(name){
     const sk=SKILLS_DATA[name];
     if(!sk||abilityPts<sk.cost||learnedSkills.includes(name)) return;
+    SFX.skillLearn();
     setAbilityPts(v=>v-sk.cost);
     setLearnedSkills(prev=>[...prev,name]);
     if(sk.stat!=="xp") setCharStats(prev=>({...prev,[sk.stat]:(prev[sk.stat]||0)+sk.bonus}));
@@ -2077,32 +3189,109 @@ function App(){
 
   if(!charClass) return <ClassPicker onSelect={setCharClass}/>;
 
-  const filterOpts=["All","Phase 1","Phase 2","Phase 3","Mobility","Strength","Cardio"];
+  const filterOpts=["All","Phase 1","Phase 2","Phase 3","Phase 4","Mobility","Strength","Cardio","Agility"];
   const visible=WORKOUTS.filter(w=>{
     if(filter==="All") return true;
     if(filter==="Phase 1") return w.phase===1;
     if(filter==="Phase 2") return w.phase===2;
     if(filter==="Phase 3") return w.phase===3;
+    if(filter==="Phase 4") return w.phase===4;
     if(filter==="Mobility") return w.type.includes("Mobility");
     if(filter==="Strength") return w.type.includes("Strength");
     if(filter==="Cardio") return w.type.includes("Cardio");
+    if(filter==="Agility") return w.type.includes("Agility");
     return true;
   });
 
-  const nextBoss=BOSSES.find(b=>!defeatedBosses.includes(b.id))||null;
+  const nextBoss = BOSSES.find(b=>!defeatedBosses.includes(b.id))||null;
+  // Boss barrier: must complete at least 3 workouts in boss's phase before challenging
+  const bossPhaseWorkouts = nextBoss
+    ? completedIds.filter(id=>WORKOUTS.find(w=>w.id===id&&w.phase===nextBoss.phase)).length
+    : 0;
+  const bossUnlocked = bossPhaseWorkouts >= 3;
 
   return (
     <div style={{minHeight:"100vh",background:`linear-gradient(160deg,#fdf0f3 0%,#fdf6f0 50%,#f5f0fd 100%)`,paddingBottom:90}}>
 
+      {/* Loot drop toast */}
+      {lootDrop&&(
+        <div style={{position:"fixed",top:14,left:"50%",transform:"translateX(-50%)",
+          background:"rgba(255,255,255,0.97)",border:`1px solid ${C.peach}50`,borderRadius:18,
+          padding:"14px 22px",zIndex:1000,display:"flex",alignItems:"center",gap:14,
+          boxShadow:"0 8px 36px rgba(212,116,138,0.22)",animation:"slideDown 0.3s ease",minWidth:270,backdropFilter:"blur(12px)"}}>
+          <span style={{fontSize:30}}>{lootDrop.icon}</span>
+          <div>
+            <div style={{fontSize:10,color:C.peach,letterSpacing:2,fontWeight:600,textTransform:"uppercase"}}>Loot Drop ✦</div>
+            <div style={{fontSize:15,fontWeight:600,color:C.text}}>{lootDrop.name}</div>
+            <div style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>{lootDrop.desc}</div>
+          </div>
+          <button onClick={()=>setLootDrop(null)} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:C.muted,marginLeft:4}}>×</button>
+        </div>
+      )}
+
+      {/* Boss story modal */}
+      {bossStory&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(20,8,16,0.80)",zIndex:500,
+          display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 20px",overflowY:"auto"}}
+          onClick={()=>setBossStory(null)}>
+          <div className="card" style={{maxWidth:420,width:"100%",padding:"30px 24px",textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:52,marginBottom:4}}>{bossStory.icon}</div>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:3,textTransform:"uppercase",marginBottom:10}}>
+              Chapter {bossStory.phase} Boss
+            </div>
+            <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic",fontSize:24,color:C.rose,marginBottom:20}}>
+              {bossStory.name}
+            </div>
+            <div style={{textAlign:"left",marginBottom:20,maxHeight:"38vh",overflowY:"auto",paddingRight:4}}>
+              {bossStory.story.split("\n\n").map((para,i)=>(
+                <p key={i} style={{fontSize:13,color:C.text,lineHeight:1.85,marginBottom:12,
+                  fontStyle:"italic",opacity:0.88,margin:"0 0 14px"}}>
+                  {para}
+                </p>
+              ))}
+            </div>
+            {bossStory.taunt&&(
+              <div style={{background:`${C.rose}10`,border:`1px solid ${C.rose}25`,borderRadius:12,
+                padding:"10px 14px",marginBottom:16,fontSize:12,color:C.rose,fontStyle:"italic"}}>
+                {bossStory.taunt}
+              </div>
+            )}
+            <div style={{fontSize:11,color:C.muted,marginBottom:20}}>
+              Weakness: <strong style={{color:C.rose}}>{bossStory.weakness}</strong>
+              &nbsp;&nbsp;·&nbsp;&nbsp;
+              {bossStory.hp} HP
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button className="btn-soft" style={{flex:1}} onClick={()=>setBossStory(null)}>Not yet</button>
+              <button className="btn-primary" style={{flex:2}} onClick={()=>{ setBossStory(null); setActiveBoss(bossStory); }}>⚔️ Face it</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {justEarned&&(
         <div style={{position:"fixed",top:14,left:"50%",transform:"translateX(-50%)",
-          background:"rgba(255,255,255,0.96)",border:`1px solid ${C.rose}35`,borderRadius:16,
-          padding:"12px 20px",zIndex:999,display:"flex",alignItems:"center",gap:12,
-          boxShadow:"0 8px 32px rgba(212,116,138,0.18)",animation:"slideDown 0.3s ease",minWidth:260,backdropFilter:"blur(10px)"}}>
-          <span style={{fontSize:24}}>{justEarned.icon}</span>
-          <div>
-            <div style={{fontSize:10,color:C.rose,letterSpacing:2,fontWeight:600,textTransform:"uppercase"}}>Achievement ✦</div>
-            <div style={{fontSize:14,fontWeight:600,color:C.text}}>{justEarned.title}</div>
+          background:"rgba(255,255,255,0.97)",border:`1px solid ${justEarned.chapterTitle?C.peach:C.rose}40`,borderRadius:18,
+          padding:"14px 20px",zIndex:999,display:"flex",alignItems:"center",gap:12,
+          boxShadow:"0 8px 36px rgba(212,116,138,0.22)",animation:"slideDown 0.3s ease",
+          minWidth:270,maxWidth:340,backdropFilter:"blur(12px)"}}>
+          <span style={{fontSize:26}}>{justEarned.icon}</span>
+          <div style={{flex:1}}>
+            {justEarned.chapterTitle ? (
+              <>
+                <div style={{fontSize:9,color:C.peach,letterSpacing:3,fontWeight:700,textTransform:"uppercase",marginBottom:2}}>
+                  {justEarned.chapterTitle}
+                </div>
+                <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>{justEarned.title}</div>
+                <div style={{fontSize:11,color:C.muted,fontStyle:"italic",lineHeight:1.5}}>{justEarned.tagline}</div>
+              </>
+            ) : (
+              <>
+                <div style={{fontSize:9,color:C.rose,letterSpacing:2,fontWeight:700,textTransform:"uppercase"}}>Achievement ✦</div>
+                <div style={{fontSize:14,fontWeight:600,color:C.text}}>{justEarned.title}</div>
+                <div style={{fontSize:11,color:C.muted,fontStyle:"italic",marginTop:1}}>{justEarned.desc}</div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -2168,37 +3357,107 @@ function App(){
                   ✨ {abilityPts} ability point{abilityPts>1?"s":""} to spend →
                 </div>
               )}
+              {/* Phase tagline */}
+              {(()=>{
+                const activePhase = [...PHASES].reverse().find(p=>xp>=p.xpNeeded);
+                if(!activePhase?.tagline) return null;
+                return (
+                  <div style={{marginTop:14,fontSize:12,color:C.muted,fontStyle:"italic",
+                    lineHeight:1.7,maxWidth:260,margin:"14px auto 0",opacity:0.8}}>
+                    <span style={{color:activePhase.color,fontWeight:600,fontSize:10,
+                      letterSpacing:2,textTransform:"uppercase",display:"block",marginBottom:3}}>
+                      {activePhase.chapter}
+                    </span>
+                    {activePhase.tagline}
+                  </div>
+                );
+              })()}
             </div>
+
+            {/* Rest Day Button */}
+            {(()=>{
+              const today = new Date().toDateString();
+              const alreadyWorkedOut = lastWorkoutDate === today && restedToday !== today;
+              const alreadyRested = restedToday === today;
+              if(alreadyWorkedOut) return null; // worked out today, no rest button needed
+              return (
+                <div className="card" style={{padding:"14px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:14}}>
+                  <span style={{fontSize:28}}>🌿</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:500,color:C.text}}>Rest Day</div>
+                    <div style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>
+                      {alreadyRested ? "Rest logged — streak protected ✓" : "Log a rest day to protect your streak"}
+                    </div>
+                  </div>
+                  <button onClick={handleRestDay} disabled={alreadyRested}
+                    style={{background:alreadyRested?"rgba(157,191,160,0.15)":"linear-gradient(135deg,#b8d8bc,#9dbfa0)",
+                      color:alreadyRested?C.sage:"#fff",border:`1px solid ${alreadyRested?"rgba(157,191,160,0.3)":"transparent"}`,
+                      borderRadius:99,padding:"7px 16px",fontSize:12,fontWeight:600,
+                      cursor:alreadyRested?"default":"pointer",fontFamily:"'Jost',sans-serif",
+                      whiteSpace:"nowrap"}}>
+                    {alreadyRested ? "✓ Rested" : "Log Rest"}
+                  </button>
+                </div>
+              );
+            })()}
 
             {nextBoss&&(
               <div className="card-pink" style={{padding:"16px",marginBottom:14}}>
-                <div style={{fontSize:10,color:C.rose,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>⚔️ Active Quest</div>
+                <div style={{fontSize:10,color:C.rose,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>⚔️ Boss Challenge</div>
                 <div style={{display:"flex",gap:12,alignItems:"center"}}>
-                  <div style={{fontSize:36}}>{nextBoss.icon}</div>
+                  <div style={{fontSize:36}}>{bossUnlocked ? nextBoss.icon : "🔒"}</div>
                   <div style={{flex:1}}>
                     <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:18,color:C.text}}>{nextBoss.name}</div>
                     <div style={{fontSize:11,color:C.muted,marginTop:2,fontStyle:"italic"}}>{nextBoss.desc}</div>
-                    <div style={{height:4,background:"rgba(212,116,138,0.12)",borderRadius:99,marginTop:8,overflow:"hidden"}}>
-                      <div style={{height:"100%",width:`${(nextBoss.hp/nextBoss.maxHp)*100}%`,background:`linear-gradient(90deg,${C.blush},${C.rose})`,borderRadius:99}}/>
-                    </div>
+                    {!bossUnlocked&&(
+                      <div style={{marginTop:6}}>
+                        <div style={{fontSize:10,color:C.muted,marginBottom:4}}>Complete {3-bossPhaseWorkouts} more Phase {nextBoss.phase} workout{3-bossPhaseWorkouts!==1?"s":""} to unlock</div>
+                        <div style={{height:4,background:"rgba(212,116,138,0.12)",borderRadius:99,overflow:"hidden"}}>
+                          <div style={{height:"100%",width:`${(bossPhaseWorkouts/3)*100}%`,background:`linear-gradient(90deg,${C.blush},${C.rose})`,borderRadius:99,transition:"width 0.4s"}}/>
+                        </div>
+                      </div>
+                    )}
+                    {bossUnlocked&&(
+                      <div style={{fontSize:10,color:C.sage,marginTop:4}}>✓ Ready to face it</div>
+                    )}
                   </div>
                 </div>
-                <button className="btn-primary" style={{width:"100%",marginTop:12}} onClick={()=>setActiveBoss(nextBoss)}>⚔️ Challenge Boss</button>
+                <button className="btn-primary" style={{width:"100%",marginTop:12,opacity:bossUnlocked?1:0.4,cursor:bossUnlocked?"pointer":"default"}}
+                  onClick={()=>{ if(bossUnlocked){ SFX.begin(); setBossStory(nextBoss); } }}>
+                  {bossUnlocked ? "⚔️ Challenge Boss" : `🔒 ${bossPhaseWorkouts}/3 workouts`}
+                </button>
               </div>
             )}
 
             <div className="card" style={{padding:"16px"}}>
               <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>✦ Gear Collection</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                {GEAR_UNLOCKS.map(g=>{
-                  const unlocked=unlockedGear.includes(g.phase);
+              <div style={{fontSize:10,color:C.muted,marginBottom:8,fontStyle:"italic"}}>Phase Rewards</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+                {GEAR_UNLOCKS.filter(g=>g.source==="phase").map(g=>{
+                  const unlocked=unlockedGear.includes(g.id);
                   return (
-                    <div key={g.phase} style={{background:unlocked?"rgba(255,235,235,0.65)":"rgba(255,255,255,0.35)",
+                    <div key={g.id} style={{background:unlocked?"rgba(255,235,235,0.65)":"rgba(255,255,255,0.35)",
                       border:`1px solid ${unlocked?C.rose+"30":"rgba(220,180,180,0.15)"}`,
-                      borderRadius:12,padding:"10px 12px",opacity:unlocked?1:0.45}}>
+                      borderRadius:12,padding:"10px 12px",opacity:unlocked?1:0.4}}>
                       <div style={{fontSize:20}}>{unlocked?g.icon:"🔒"}</div>
                       <div style={{fontSize:12,fontWeight:500,color:unlocked?C.text:C.muted,marginTop:4}}>{g.name}</div>
                       <div style={{fontSize:10,color:C.muted,fontStyle:"italic"}}>{g.desc}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{fontSize:10,color:C.muted,marginBottom:8,fontStyle:"italic"}}>Boss Loot Drops</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                {GEAR_UNLOCKS.filter(g=>g.source==="boss").map(g=>{
+                  const unlocked=unlockedGear.includes(g.id);
+                  const boss=BOSSES.find(b=>b.id===g.bossId);
+                  return (
+                    <div key={g.id} style={{background:unlocked?"rgba(245,230,255,0.65)":"rgba(255,255,255,0.35)",
+                      border:`1px solid ${unlocked?C.lavender+"40":"rgba(220,180,180,0.15)"}`,
+                      borderRadius:12,padding:"10px 12px",opacity:unlocked?1:0.35}}>
+                      <div style={{fontSize:20}}>{unlocked?g.icon:"🔒"}</div>
+                      <div style={{fontSize:12,fontWeight:500,color:unlocked?C.text:C.muted,marginTop:4}}>{unlocked?g.name:"???"}</div>
+                      <div style={{fontSize:10,color:C.muted,fontStyle:"italic"}}>{unlocked?g.desc:`Drop from ${boss?.name||"unknown"}`}</div>
                     </div>
                   );
                 })}
@@ -2210,6 +3469,25 @@ function App(){
         {/* TRAIN */}
         {tab==="train"&&(
           <div>
+            {/* Active phase narrative banner */}
+            {(()=>{
+              const activePhase = [...PHASES].reverse().find(p=>xp>=p.xpNeeded);
+              if(!activePhase?.chapter) return null;
+              return (
+                <div className="card-pink" style={{padding:"16px 18px",marginBottom:12}}>
+                  <div style={{fontSize:9,color:C.rose,letterSpacing:3,textTransform:"uppercase",marginBottom:6}}>
+                    {activePhase.chapter}
+                  </div>
+                  <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic",
+                    fontSize:15,color:C.rose,marginBottom:8,lineHeight:1.4}}>
+                    {activePhase.tagline}
+                  </div>
+                  <div style={{fontSize:12,color:C.text,lineHeight:1.75,opacity:0.82,fontStyle:"italic"}}>
+                    {activePhase.narrative}
+                  </div>
+                </div>
+              );
+            })()}
             <div style={{display:"flex",gap:5,overflowX:"auto",paddingBottom:6,marginBottom:10}}>
               {PHASES.map(p=>{
                 const unlocked=xp>=p.xpNeeded;
@@ -2253,11 +3531,18 @@ function App(){
               <RadarChart stats={charStats}/>
             </div>
             <div className="card" style={{padding:"16px",marginBottom:14}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                 <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>✨ Skills</div>
-                <div style={{fontSize:11,color:C.lavender,background:`${C.lavender}12`,border:`1px solid ${C.lavender}28`,borderRadius:99,padding:"2px 10px"}}>
-                  {abilityPts} pts
+                <div style={{fontSize:11,color:C.lavender,background:`${C.lavender}12`,border:`1px solid ${C.lavender}28`,borderRadius:99,padding:"2px 10px",fontWeight:600}}>
+                  {abilityPts} pt{abilityPts!==1?"s":""}
                 </div>
+              </div>
+              <div style={{fontSize:10,color:C.muted,marginBottom:12,fontStyle:"italic"}}>Earn 1 pt every 3 workouts · {3-(totalWorkouts%3)} workout{3-(totalWorkouts%3)!==1?"s":""} to next point</div>
+              {/* cost tier legend */}
+              <div style={{display:"flex",gap:6,marginBottom:12}}>
+                {[["1pt","#d4748a"],["2pt","#c9a8d4"],["3pt","#e8c97a"]].map(([label,col])=>(
+                  <div key={label} style={{fontSize:10,color:col,background:`${col}15`,border:`1px solid ${col}30`,borderRadius:99,padding:"2px 8px"}}>{label}</div>
+                ))}
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {cls.skills.map(sk=>{
@@ -2265,24 +3550,28 @@ function App(){
                   if(!data) return null;
                   const learned=learnedSkills.includes(sk);
                   const canLearn=abilityPts>=data.cost&&!learned;
+                  const tierColor = data.cost===1?"#d4748a":data.cost===2?"#c9a8d4":"#e8c97a";
                   return (
                     <div key={sk} style={{display:"flex",gap:10,alignItems:"center",
-                      background:learned?"rgba(255,235,235,0.6)":"rgba(255,255,255,0.5)",
-                      border:`1px solid ${learned?C.rose+"30":"rgba(220,180,180,0.18)"}`,
+                      background:learned?`${tierColor}12`:"rgba(255,255,255,0.5)",
+                      border:`1px solid ${learned?tierColor+"40":"rgba(220,180,180,0.18)"}`,
                       borderRadius:12,padding:"10px 12px"}}>
                       <span style={{fontSize:20}}>{data.icon}</span>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:13,fontWeight:500,color:C.text}}>{sk}</div>
-                        <div style={{fontSize:11,color:C.muted,fontStyle:"italic"}}>{data.desc}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:6}}>
+                          <span style={{fontSize:13,fontWeight:500,color:C.text}}>{sk}</span>
+                          <span style={{fontSize:9,color:tierColor,background:`${tierColor}15`,borderRadius:99,padding:"1px 6px"}}>{data.cost}pt</span>
+                        </div>
+                        <div style={{fontSize:11,color:C.muted,fontStyle:"italic",marginTop:1}}>{data.desc}</div>
                       </div>
                       {learned
-                        ?<span style={{fontSize:11,color:C.sage}}>✓</span>
+                        ?<span style={{fontSize:14,color:C.sage}}>✓</span>
                         :<button onClick={()=>learnSkill(sk)} disabled={!canLearn}
-                          style={{background:canLearn?"linear-gradient(135deg,#e8a0a0,#d4748a)":"rgba(220,180,180,0.18)",
+                          style={{background:canLearn?`linear-gradient(135deg,${tierColor}cc,${tierColor})`:"rgba(220,180,180,0.18)",
                             color:canLearn?"#fff":C.muted,border:"none",borderRadius:99,
-                            padding:"5px 12px",fontSize:11,cursor:canLearn?"pointer":"default",
-                            fontFamily:"'Jost',sans-serif",fontWeight:500}}>
-                          {data.cost}pt
+                            padding:"5px 13px",fontSize:11,cursor:canLearn?"pointer":"default",
+                            fontFamily:"'Jost',sans-serif",fontWeight:600,whiteSpace:"nowrap"}}>
+                          Learn
                         </button>
                       }
                     </div>
@@ -2292,15 +3581,49 @@ function App(){
             </div>
             {defeatedBosses.length>0&&(
               <div className="card" style={{padding:"16px",marginBottom:14}}>
-                <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>🏆 Defeated</div>
+                <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>🏆 Defeated</div>
                 {BOSSES.filter(b=>defeatedBosses.includes(b.id)).map(b=>(
-                  <div key={b.id} style={{display:"flex",gap:10,alignItems:"center",marginBottom:6}}>
-                    <span style={{fontSize:20}}>{b.icon}</span>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:500,color:C.text}}>{b.name}</div>
-                      <div style={{fontSize:10,color:C.sage}}>+{b.xpReward} xp earned ✓</div>
+                  <div key={b.id} style={{marginBottom:14,paddingBottom:14,
+                    borderBottom:`1px solid rgba(212,116,138,0.1)`}}>
+                    <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:6}}>
+                      <span style={{fontSize:22}}>{b.icon}</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:600,color:C.text}}>{b.name}</div>
+                        <div style={{fontSize:10,color:C.sage}}>+{b.xpReward} xp ✓</div>
+                      </div>
                     </div>
+                    {b.victory&&(
+                      <div style={{fontSize:12,color:C.muted,fontStyle:"italic",lineHeight:1.7,
+                        paddingLeft:32,opacity:0.85}}>
+                        {b.victory.split("\n\n")[0]}
+                      </div>
+                    )}
                   </div>
+                ))}
+              </div>
+            )}
+            {defeatedBosses.length===4&&(
+              <div className="card" style={{padding:"22px 20px",marginBottom:14,
+                background:"linear-gradient(135deg,rgba(255,240,245,0.9),rgba(245,240,255,0.9))",
+                border:`1px solid ${C.rose}30`}}>
+                <div style={{fontSize:10,color:C.rose,letterSpacing:3,textTransform:"uppercase",marginBottom:12}}>
+                  ✦ Epilogue
+                </div>
+                <div style={{fontFamily:"'Cormorant Garamond',serif",fontStyle:"italic",
+                  fontSize:20,color:C.text,marginBottom:16,lineHeight:1.4}}>
+                  The Court Is Yours
+                </div>
+                {[
+                  "You came back.",
+                  "Not in spite of what you went through. Because of it. The months of exhaustion, the quiet fear, the doubt that dressed itself up as reason — you met every single one of them. And you moved anyway.",
+                  "You are not the person who started this. You are the person who finished it. Stronger, more patient with yourself, more certain of what your body can do.",
+                  "The court isn't the destination. It's just where this chapter ends and the next one begins.",
+                  "Go play. You've more than earned it. ✦"
+                ].map((para,i)=>(
+                  <p key={i} style={{fontSize:13,color:C.text,lineHeight:1.9,
+                    fontStyle:"italic",opacity:0.88,margin:"0 0 14px"}}>
+                    {para}
+                  </p>
                 ))}
               </div>
             )}
@@ -2322,7 +3645,9 @@ function App(){
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
                       <div>
                         <div style={{fontSize:14,fontWeight:500,color:C.text}}>{done?"🌸 ":""}{q.title}</div>
-                        <div style={{fontSize:11,color:C.muted,fontStyle:"italic",marginTop:1}}>{q.desc}</div>
+                        <div style={{fontSize:11,color:C.muted,fontStyle:"italic",marginTop:1}}>
+                          {done && q.flavor ? q.flavor : q.desc}
+                        </div>
                       </div>
                       <span style={{fontSize:11,color:C.peach,fontWeight:600}}>+{q.xpBonus}</span>
                     </div>
@@ -2352,10 +3677,12 @@ function App(){
             </div>
             <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>💌 Gentle Reminders</div>
             {[
-              ["Listen to your body","Pressure, pain, or heaviness = stop. You're rebuilding, not proving anything."],
-              ["Pelvic floor first","Core exercises before any jumping. If you feel leaking or heaviness, regress."],
-              ["Consistency over intensity","3 shorter sessions > 1 brutal one. Rest is part of the training."],
-              ["Sport timeline","Most cleared for running/cutting 12 weeks post-clearance. Tennis & basketball Phase 4."],
+              ["Listen to your body","Pressure, pain, or heaviness = stop. You're rebuilding, not proving anything. This is Chapter I — the listening comes first."],
+              ["Pelvic floor first","Core exercises before any jumping. If you feel leaking or heaviness, regress. The foundation has to hold everything that comes after."],
+              ["The sloth is a liar","The voice that says you've done enough, that today can be tomorrow — that's the Iron Sloth. You know what to do with it."],
+              ["Consistency over intensity","Three shorter sessions beat one brutal one. The Fear Drake wants you to overcorrect. Don't give it the satisfaction."],
+              ["The phantom is afraid of you","The player you used to be never had to fight through what you have. She never had to come back. You did. That makes you more, not less."],
+              ["Sport timeline","Most cleared for running/cutting 12 weeks post-clearance. Tennis & basketball Phase 4 — the court will still be there. You're getting there."],
             ].map(([t,b])=>(
               <div key={t} className="card" style={{padding:"12px 14px",marginBottom:8,borderLeft:`3px solid ${C.blush}`}}>
                 <div style={{fontSize:13,fontWeight:500,color:C.text}}>{t}</div>
