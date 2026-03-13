@@ -217,6 +217,57 @@ function StatBar({statKey,value}){
   );
 }
 
+// ── Radar Chart ──
+function RadarChart({stats}){
+  const keys=["str","agi","end","pwr","vit"];
+  const cx=120,cy=115,maxR=78,maxVal=50;
+  const angle=(i)=>(Math.PI*2*(i/5))-(Math.PI/2);
+  const pt=(i,r)=>({x:cx+r*Math.cos(angle(i)),y:cy+r*Math.sin(angle(i))});
+  const rings=[0.25,0.5,0.75,1];
+  const polyPts=(r)=>keys.map((_,i)=>`${pt(i,r).x},${pt(i,r).y}`).join(" ");
+  const statPts=keys.map((k,i)=>{
+    const r=(Math.min(stats[k]||1,maxVal)/maxVal)*maxR;
+    return `${pt(i,r).x},${pt(i,r).y}`;
+  }).join(" ");
+  const statColors=["#e87070","#70c490","#70a8e8","#c090e8","#e8a0b0"];
+  const lp=(i)=>pt(i,maxR+16);
+  return (
+    <svg viewBox="0 0 240 210" width="100%" style={{maxWidth:240,display:"block",margin:"0 auto"}}>
+      {rings.map((r,ri)=>(
+        <polygon key={ri} points={polyPts(maxR*r)}
+          fill={ri===rings.length-1?"rgba(212,116,138,0.04)":"none"}
+          stroke="rgba(180,130,130,0.18)" strokeWidth="0.8"/>
+      ))}
+      {keys.map((_,i)=>{
+        const p=pt(i,maxR);
+        return <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="rgba(180,130,130,0.18)" strokeWidth="0.8"/>;
+      })}
+      <polygon points={statPts}
+        fill="rgba(212,116,138,0.15)" stroke={C.rose} strokeWidth="1.8"
+        strokeLinejoin="round" style={{transition:"all 0.5s"}}/>
+      {keys.map((k,i)=>{
+        const r=(Math.min(stats[k]||1,maxVal)/maxVal)*maxR;
+        const p=pt(i,r);
+        return <circle key={k} cx={p.x} cy={p.y} r={3.5}
+          fill={statColors[i]} stroke="rgba(253,246,240,0.9)" strokeWidth="1.5"
+          style={{transition:"all 0.5s"}}/>;
+      })}
+      {keys.map((k,i)=>{
+        const l=lp(i);
+        const m=statMeta[k];
+        return (
+          <g key={k}>
+            <text x={l.x} y={l.y-2} textAnchor="middle" fontSize="9" fill={statColors[i]}
+              fontFamily="Jost,sans-serif" fontWeight="600" letterSpacing="0.5">{m.label.toUpperCase()}</text>
+            <text x={l.x} y={l.y+10} textAnchor="middle" fontSize="12" fill={statColors[i]}
+              fontFamily="Jost,sans-serif" fontWeight="700">{stats[k]||1}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 // ── Class Picker ──
 function ClassPicker({onSelect}){
   const [hov,setHov]=useState(null);
@@ -288,7 +339,10 @@ function WorkoutCard({workout,onStart,completed}){
         transform:hov?"translateY(-1px)":"none",
         boxShadow:hov?"0 6px 20px rgba(212,116,138,0.1)":"0 2px 8px rgba(212,116,138,0.05)",
         backdropFilter:"blur(6px)",position:"relative"}}>
-      {completed&&<div style={{position:"absolute",top:10,right:12,fontSize:13}}>🌸</div>}
+      {completed&&<div style={{position:"absolute",top:10,right:12,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
+        <span style={{fontSize:13}}>🌸</span>
+        <span style={{fontSize:9,color:C.rose,background:"rgba(212,116,138,0.1)",borderRadius:99,padding:"1px 7px",border:`1px solid rgba(212,116,138,0.2)`}}>repeat ↺</span>
+      </div>}
       <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
         <div style={{width:38,height:38,borderRadius:12,flexShrink:0,fontSize:18,
           background:`${phase.color}18`,border:`1px solid ${phase.color}35`,
@@ -302,8 +356,10 @@ function WorkoutCard({workout,onStart,completed}){
                 {e==="Bike"?"🚴":e==="Ball"?"⚽":"🧘"} {e}
               </span>
             ))}
-            <span style={{fontSize:10,background:`${C.rose}12`,border:`1px solid ${C.rose}25`,borderRadius:99,padding:"2px 8px",color:C.rose}}>+{workout.xp} xp</span>
-            {Object.entries(workout.statGains).map(([k,v])=>(
+            <span style={{fontSize:10,background:`${C.rose}12`,border:`1px solid ${C.rose}25`,borderRadius:99,padding:"2px 8px",color:C.rose}}>
+              {completed?`+${Math.floor(workout.xp/2)} xp (repeat)`:`+${workout.xp} xp`}
+            </span>
+            {!completed&&Object.entries(workout.statGains).map(([k,v])=>(
               <span key={k} style={{fontSize:10,background:`${statMeta[k].color}10`,border:`1px solid ${statMeta[k].color}25`,borderRadius:99,padding:"2px 8px",color:statMeta[k].color}}>
                 {statMeta[k].icon}+{v}
               </span>
@@ -320,30 +376,1401 @@ const OV={position:"fixed",inset:0,background:"rgba(50,20,20,0.4)",display:"flex
 const MB={background:"rgba(253,246,240,0.98)",border:"1px solid rgba(220,160,160,0.3)",borderRadius:22,padding:"24px 20px",width:"100%",maxWidth:440,maxHeight:"90vh",overflowY:"auto",position:"relative",boxShadow:"0 20px 60px rgba(212,116,138,0.12)"};
 const CB={position:"absolute",top:14,right:14,background:"rgba(220,160,160,0.12)",border:"1px solid rgba(220,160,160,0.2)",borderRadius:99,width:28,height:28,color:C.muted,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"};
 
+// ── Exercise Diagrams ──
+// Two-frame start→end SVG diagrams
+const PK = "#d4748a";
+const STROKE = 2.8;
+
+function Head({cx,cy,r=9}){
+  return <circle cx={cx} cy={cy} r={r} fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round"/>;
+}
+function Seg({x1,y1,x2,y2}){
+  return <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round"/>;
+}
+function Floor2({y,x1=10,x2=270}){
+  return <line x1={x1} y1={y} x2={x2} y2={y} stroke={PK} strokeWidth={1} strokeOpacity={0.3} strokeLinecap="round"/>;
+}
+function Divider({h=170}){
+  return <line x1={140} y1={12} x2={140} y2={h} stroke={PK} strokeWidth={1} strokeOpacity={0.22} strokeDasharray="4 3"/>;
+}
+function FL({x,text,y=14}){
+  return <text x={x} y={y} fontSize="10" fill={PK} textAnchor="middle" fontFamily="Jost,sans-serif" opacity="0.85">{text}</text>;
+}
+function Cue({x,y,text,anchor="middle"}){
+  return <text x={x} y={y} fontSize="9.5" fill={PK} textAnchor={anchor} fontFamily="Jost,sans-serif">{text}</text>;
+}
+function Arr({x1,y1,x2,y2,color=PK}){
+  const ang=Math.atan2(y2-y1,x2-x1),al=8;
+  return <g stroke={color} strokeWidth={2} strokeLinecap="round" fill="none">
+    <line x1={x1} y1={y1} x2={x2} y2={y2}/>
+    <line x1={x2} y1={y2} x2={x2-al*Math.cos(ang-0.42)} y2={y2-al*Math.sin(ang-0.42)}/>
+    <line x1={x2} y1={y2} x2={x2-al*Math.cos(ang+0.42)} y2={y2-al*Math.sin(ang+0.42)}/>
+  </g>;
+}
+function Ball({cx,cy,r=10}){
+  return <circle cx={cx} cy={cy} r={r} fill="rgba(212,116,138,0.14)" stroke={PK} strokeWidth={1.5}/>;
+}
+
+// Reusable stick figure poses
+// Standing upright: cx = centre x, baseY = floor y
+function StandFig({cx,baseY,color,opacity=1,armL=null,armR=null,legLKnee=null,legRKnee=null,legLFoot=null,legRFoot=null}){
+  const hy=baseY-105, ty=baseY-88, sy=baseY-65, hy2=baseY-45;
+  const defLL={x:cx-10,y:baseY-10},defLR={x:cx+10,y:baseY-10};
+  const defFL={x:cx-12,y:baseY},defFR={x:cx+12,y:baseY};
+  const ll=legLKnee||defLL,lr=legRKnee||defLR;
+  const fl=legLFoot||defFL,fr=legRFoot||defFR;
+  const al=armL||{x:cx-22,y:sy+8},ar=armR||{x:cx+22,y:sy+8};
+  return <g color={color} opacity={opacity}>
+    <Head cx={cx} cy={hy}/>
+    <Seg x1={cx} y1={hy+9} x2={cx} y2={sy}/>
+    <Seg x1={cx-14} y1={sy} x2={cx+14} y2={sy}/>
+    <Seg x1={cx} y1={sy-18} x2={al.x} y2={al.y}/>
+    <Seg x1={cx} y1={sy-18} x2={ar.x} y2={ar.y}/>
+    <Seg x1={cx-8} y1={sy} x2={ll.x} y2={ll.y}/>
+    <Seg x1={ll.x} y1={ll.y} x2={fl.x} y2={fl.y}/>
+    <Seg x1={cx+8} y1={sy} x2={lr.x} y2={lr.y}/>
+    <Seg x1={lr.x} y1={lr.y} x2={fr.x} y2={fr.y}/>
+  </g>;
+}
+
+// Lying on back: cx=hip x, y=floor y
+function LieFig({cx,floorY,color,opacity=1,kneeAngle=45,legExtR=false}){
+  const hy=floorY-8;
+  return <g color={color} opacity={opacity}>
+    <Head cx={cx-68} cy={floorY-8} r={9}/>
+    <Seg x1={cx-60} y1={hy} x2={cx} y2={hy}/>
+    <Seg x1={cx-50} y1={hy} x2={cx-45} y2={hy+22}/>
+    <Seg x1={cx-38} y1={hy} x2={cx-33} y2={hy+22}/>
+    {legExtR
+      ? <><Seg x1={cx} y1={hy} x2={cx+40} y2={hy-5}/><Seg x1={cx+40} y1={hy-5} x2={cx+60} y2={hy}/></>
+      : <><Seg x1={cx} y1={hy} x2={cx+20} y2={hy-25}/><Seg x1={cx+20} y1={hy-25} x2={cx+32} y2={hy}/></>
+    }
+    <Seg x1={cx+8} y1={hy} x2={cx+28} y2={hy-20}/><Seg x1={cx+28} y1={hy-20} x2={cx+40} y2={hy}/>
+  </g>;
+}
+
+const DIAGRAMS = {
+  // ─── PHASE 1 ─────────────────────────────────────────────────────────
+  "Diaphragmatic Breathing": ()=>(
+    <svg viewBox="0 0 280 160" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={130} x1={10} x2={270}/>
+      <Divider h={145}/>
+      <FL x={70} text="breathe in"/>
+      <FL x={210} text="breathe out"/>
+      {/* LEFT: lying, belly rising */}
+      <LieFig cx={100} floorY={130} color="#9a7a7a" opacity={0.45}/>
+      <Arr x1={75} y1={100} x2={75} y2={84} color={PK}/>
+      <Cue x={75} y={78} text="belly rises"/>
+      {/* RIGHT: belly falling */}
+      <LieFig cx={215} floorY={130} color="#9a7a7a" opacity={0.9}/>
+      <Arr x1={215} y1={82} x2={215} y2={98} color={PK}/>
+      <Cue x={215} y={108} text="belly falls"/>
+    </svg>
+  ),
+
+  "Heel Slides": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={133} x1={10} x2={270}/>
+      <Divider h={148}/>
+      <FL x={70} text="start — legs straight"/>
+      <FL x={210} text="slide heel in"/>
+      {/* LEFT: lying, legs straight */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={32} cy={122} r={9}/>
+        <Seg x1={41} y1={122} x2={105} y2={122}/>
+        <Seg x1={55} y1={122} x2={50} y2={144}/>
+        <Seg x1={70} y1={122} x2={65} y2={144}/>
+        <Seg x1={105} y1={122} x2={128} y2={124}/>
+        <Seg x1={128} y1={124} x2={132} y2={133}/>
+        <Seg x1={95} y1={122} x2={118} y2={124}/>
+        <Seg x1={118} y1={124} x2={122} y2={133}/>
+      </g>
+      {/* RIGHT: one knee bent/heel slid in */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={152} cy={122} r={9}/>
+        <Seg x1={161} y1={122} x2={225} y2={122}/>
+        <Seg x1={175} y1={122} x2={170} y2={144}/>
+        <Seg x1={190} y1={122} x2={185} y2={144}/>
+        {/* straight leg */}
+        <Seg x1={225} y1={122} x2={248} y2={124}/>
+        <Seg x1={248} y1={124} x2={252} y2={133}/>
+        {/* bent/slid leg */}
+        <Seg x1={215} y1={122} x2={218} y2={100}/>
+        <Seg x1={218} y1={100} x2={230} y2={113}/>
+        <Seg x1={230} y1={113} x2={236} y2={133}/>
+      </g>
+      <Arr x1={255} y1={113} x2={237} y2={113} color={PK}/>
+      <Cue x={238} y={150} text="heel slides in"/>
+    </svg>
+  ),
+
+  "Glute Bridge": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="start — hips down"/>
+      <FL x={210} text="hips lifted"/>
+      {/* LEFT: flat on back, knees bent */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={28} cy={128} r={9}/>
+        <Seg x1={37} y1={128} x2={100} y2={130}/>
+        <Seg x1={50} y1={128} x2={45} y2={148}/>
+        <Seg x1={100} y1={130} x2={115} y2={112}/>
+        <Seg x1={115} y1={112} x2={122} y2={130}/>
+        <Seg x1={109} y1={130} x2={124} y2={112}/>
+        <Seg x1={124} y1={112} x2={131} y2={130}/>
+      </g>
+      {/* RIGHT: hips bridged up */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={155} cy={128} r={9}/>
+        <Seg x1={164} y1={128} x2={190} y2={116}/>
+        <Seg x1={190} y1={116} x2={220} y2={122}/>
+        <Seg x1={168} y1={128} x2={163} y2={148}/>
+        <Seg x1={220} y1={122} x2={232} y2={106}/>
+        <Seg x1={232} y1={106} x2={240} y2={125}/>
+        <Seg x1={228} y1={122} x2={240} y2={106}/>
+        <Seg x1={240} y1={106} x2={248} y2={125}/>
+      </g>
+      <Arr x1={200} y1={128} x2={200} y2={112} color={PK}/>
+      <Cue x={200} y={152} text="squeeze glutes at top"/>
+    </svg>
+  ),
+
+  "Bird-Dog": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="start — all fours"/>
+      <FL x={210} text="extend opposite arm + leg"/>
+      {/* LEFT: on all fours */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={30} cy={100} r={9}/>
+        <Seg x1={39} y1={100} x2={100} y2={100}/>
+        <Seg x1={48} y1={100} x2={44} y2={130}/>
+        <Seg x1={44} y1={130} x2={44} y2={140}/>
+        <Seg x1={92} y1={100} x2={88} y2={130}/>
+        <Seg x1={88} y1={130} x2={88} y2={140}/>
+      </g>
+      {/* RIGHT: arm forward, leg back */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={155} cy={100} r={9}/>
+        <Seg x1={164} y1={100} x2={220} y2={100}/>
+        <Seg x1={212} y1={100} x2={208} y2={130}/>
+        <Seg x1={208} y1={130} x2={208} y2={140}/>
+        <Seg x1={172} y1={100} x2={168} y2={130}/>
+        <Seg x1={168} y1={130} x2={168} y2={140}/>
+      </g>
+      <Arr x1={158} y1={96} x2={140} y2={82} color={PK}/>
+      <Arr x1={220} y1={100} x2={268} y2={88} color={PK}/>
+      <Cue x={130} y={78} text="arm" anchor="end"/>
+      <Cue x={270} y={84} text="leg" anchor="start"/>
+      <Cue x={210} y={155} text="no hip rotation"/>
+    </svg>
+  ),
+
+  "Cat-Cow": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={145}/>
+      <Divider h={152}/>
+      <FL x={70} text="cat — spine up"/>
+      <FL x={210} text="cow — spine down"/>
+      {/* LEFT: cat (spine arched up) */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={28} cy={105} r={9}/>
+        <path d="M37,105 Q70,72 100,80 Q115,84 125,95" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round"/>
+        <Seg x1={48} y1={98} x2={44} y2={130}/><Seg x1={44} y1={130} x2={44} y2={145}/>
+        <Seg x1={115} y1={90} x2={112} y2={120}/><Seg x1={112} y1={120} x2={112} y2={145}/>
+      </g>
+      <Arr x1={72} y1={88} x2={72} y2={72} color={PK}/>
+      {/* RIGHT: cow (spine sagged down) */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={158} cy={88} r={9}/>
+        <path d="M167,90 Q200,110 230,104 Q243,100 253,92" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round"/>
+        <Seg x1={178} y1={100} x2={174} y2={130}/><Seg x1={174} y1={130} x2={174} y2={145}/>
+        <Seg x1={245} y1={96} x2={242} y2={126}/><Seg x1={242} y1={126} x2={242} y2={145}/>
+      </g>
+      <Arr x1={210} y1={95} x2={210} y2={112} color={PK}/>
+      <Cue x={140} y={160} text="flow between these two"/>
+    </svg>
+  ),
+
+  "Child's Pose Hold": ()=>(
+    <svg viewBox="0 0 280 155" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={128}/>
+      <Divider h={140}/>
+      <FL x={70} text="start — kneeling"/>
+      <FL x={210} text="fold forward, reach"/>
+      {/* LEFT: kneeling upright */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={65} cy={52} r={9}/>
+        <Seg x1={65} y1={61} x2={65} y2={88}/>
+        <Seg x1={65} y1={72} x2={48} y2={84}/><Seg x1={65} y1={72} x2={82} y2={84}/>
+        <Seg x1={57} y1={88} x2={52} y2={108}/><Seg x1={52} y1={108} x2={48} y2={128}/>
+        <Seg x1={73} y1={88} x2={78} y2={108}/><Seg x1={78} y1={108} x2={82} y2={128}/>
+      </g>
+      {/* RIGHT: child's pose */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={160} cy={110} r={9}/>
+        <Seg x1={169} y1={110} x2={200} y2={105}/>
+        <Seg x1={200} y1={105} x2={215} y2={108}/><Seg x1={215} y1={108} x2={200} y2={128}/>
+        <Seg x1={208} y1={105} x2={222} y2={108}/><Seg x1={222} y1={108} x2={207} y2={128}/>
+        <Seg x1={169} y1={112} x2={150} y2={115}/>
+      </g>
+      <Arr x1={152} y1={107} x2={132} y2={100} color={PK}/>
+      <Cue x={130} y={96} text="reach" anchor="end"/>
+      <Cue x={210} y={145} text="hips toward heels"/>
+    </svg>
+  ),
+
+  "World's Greatest Stretch": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="lunge position"/>
+      <FL x={210} text="rotate + reach up"/>
+      {/* LEFT: lunge */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={75} cy={55} r={9}/><Seg x1={75} y1={64} x2={78} y2={92}/>
+        <Seg x1={78} y1={78} x2={60} y2={90}/><Seg x1={78} y1={78} x2={95} y2={88}/>
+        <Seg x1={70} y1={92} x2={48} y2={105}/><Seg x1={48} y1={105} x2={38} y2={140}/>
+        <Seg x1={86} y1={92} x2={105} y2={108}/><Seg x1={105} y1={108} x2={112} y2={140}/>
+      </g>
+      {/* RIGHT: lunge + rotation, arm up */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={202} cy={55} r={9}/><Seg x1={202} y1={64} x2={205} y2={92}/>
+        <Seg x1={198} y1={78} x2={180} y2={88}/>
+        <Seg x1={197} y1={92} x2={175} y2={105}/><Seg x1={175} y1={105} x2={165} y2={140}/>
+        <Seg x1={213} y1={92} x2={232} y2={108}/><Seg x1={232} y1={108} x2={239} y2={140}/>
+      </g>
+      <Arr x1={205} y1={72} x2={230} y2={40} color={PK}/>
+      <Cue x={235} y={36} text="reach" anchor="start"/>
+      <Cue x={205} y={156} text="open chest, breathe"/>
+    </svg>
+  ),
+
+  "90/90 Hip Rotations": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={148}/>
+      <Divider h={155}/>
+      <FL x={70} text="start — sit tall"/>
+      <FL x={210} text="front leg 90°, back 90°"/>
+      {/* LEFT: seated, legs not yet in position */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={70} cy={50} r={9}/><Seg x1={70} y1={59} x2={70} y2={100}/>
+        <Seg x1={70} y1={72} x2={52} y2={84}/><Seg x1={70} y1={72} x2={88} y2={84}/>
+        <Seg x1={62} y1={100} x2={40} y2={120}/><Seg x1={40} y1={120} x2={35} y2={148}/>
+        <Seg x1={78} y1={100} x2={100} y2={118}/><Seg x1={100} y1={118} x2={105} y2={148}/>
+      </g>
+      {/* RIGHT: 90/90 position */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={50} r={9}/><Seg x1={210} y1={59} x2={210} y2={100}/>
+        <Seg x1={210} y1={72} x2={192} y2={84}/><Seg x1={210} y1={72} x2={228} y2={84}/>
+        {/* front leg: shin points forward */}
+        <Seg x1={202} y1={100} x2={175} y2={110}/><Seg x1={175} y1={110} x2={170} y2={148}/>
+        {/* back leg: shin points back */}
+        <Seg x1={218} y1={100} x2={245} y2={108}/><Seg x1={245} y1={108} x2={260} y2={135}/>
+      </g>
+      <Cue x={162} y={120} text="90°" anchor="end"/>
+      <Cue x={258} y={120} text="90°" anchor="start"/>
+      <Cue x={210} y={160} text="sit tall, rotate from hip"/>
+    </svg>
+  ),
+
+  "Thread the Needle": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="start — all fours"/>
+      <FL x={210} text="thread arm through"/>
+      {/* LEFT: all fours */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={28} cy={100} r={9}/>
+        <Seg x1={37} y1={100} x2={100} y2={100}/>
+        <Seg x1={48} y1={100} x2={44} y2={128}/><Seg x1={44} y1={128} x2={44} y2={140}/>
+        <Seg x1={92} y1={100} x2={88} y2={128}/><Seg x1={88} y1={128} x2={88} y2={140}/>
+        <Seg x1={60} y1={100} x2={55} y2={80}/>
+        <Seg x1={78} y1={100} x2={82} y2={80}/>
+      </g>
+      {/* RIGHT: arm threaded under, body rotated */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={155} cy={115} r={9}/>
+        <Seg x1={164} y1={112} x2={220} y2={100}/>
+        <Seg x1={212} y1={100} x2={208} y2={128}/><Seg x1={208} y1={128} x2={208} y2={140}/>
+        <Seg x1={175} y1={105} x2={172} y2={128}/><Seg x1={172} y1={128} x2={172} y2={140}/>
+        {/* threading arm (going under body) */}
+        <Seg x1={195} y1={102} x2={165} y2={95}/>
+        {/* top arm raised */}
+        <Seg x1={195} y1={102} x2={222} y2={82}/>
+      </g>
+      <Arr x1={162} y1={96} x2={148} y2={88} color={PK}/>
+      <Cue x={145} y={84} text="reach under" anchor="end"/>
+      <Cue x={210} y={155} text="hips stay stacked"/>
+    </svg>
+  ),
+
+  "Doorframe Chest Opener": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="arm on frame"/>
+      <FL x={210} text="rotate body away"/>
+      {/* doorframe line */}
+      <line x1={90} y1={15} x2={90} y2={140} stroke={PK} strokeWidth={3} strokeOpacity={0.2} strokeLinecap="round"/>
+      <line x1={185} y1={15} x2={185} y2={140} stroke={PK} strokeWidth={3} strokeOpacity={0.2} strokeLinecap="round"/>
+      {/* LEFT: facing frame, arm planted */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={70} cy={45} r={9}/><Seg x1={70} y1={54} x2={70} y2={95}/>
+        <Seg x1={70} y1={68} x2={88} y2={60}/>
+        <Seg x1={70} y1={68} x2={55} y2={80}/>
+        <Seg x1={62} y1={95} x2={58} y2={140}/><Seg x1={78} y1={95} x2={82} y2={140}/>
+      </g>
+      {/* RIGHT: body rotated away, arm stays on frame */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={215} cy={45} r={9}/><Seg x1={215} y1={54} x2={215} y2={95}/>
+        <Seg x1={215} y1={68} x2={187} y2={58}/>
+        <Seg x1={215} y1={68} x2={238} y2={75}/>
+        <Seg x1={207} y1={95} x2={203} y2={140}/><Seg x1={223} y1={95} x2={227} y2={140}/>
+      </g>
+      <Arr x1={235} y1={72} x2={248} y2={65} color={PK}/>
+      <Cue x={250} y={62} text="rotate" anchor="start"/>
+      <Cue x={210} y={156} text="feel stretch across chest"/>
+    </svg>
+  ),
+
+  "Half-Kneeling Hip Flexor Stretch": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="half-kneeling"/>
+      <FL x={210} text="shift hips forward"/>
+      {/* LEFT: half-kneeling upright */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={68} cy={40} r={9}/><Seg x1={68} y1={49} x2={68} y2={82}/>
+        <Seg x1={68} y1={62} x2={50} y2={74}/><Seg x1={68} y1={62} x2={86} y2={74}/>
+        <Seg x1={60} y1={82} x2={38} y2={95}/><Seg x1={38} y1={95} x2={28} y2={140}/>
+        <Seg x1={76} y1={82} x2={88} y2={105}/><Seg x1={88} y1={105} x2={92} y2={140}/>
+      </g>
+      {/* RIGHT: hips shifted forward, slight lean */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={205} cy={38} r={9}/><Seg x1={205} y1={47} x2={208} y2={80}/>
+        <Seg x1={205} y1={60} x2={188} y2={70}/><Seg x1={205} y1={60} x2={222} y2={68}/>
+        <Seg x1={200} y1={80} x2={175} y2={90}/><Seg x1={175} y1={90} x2={162} y2={140}/>
+        <Seg x1={216} y1={80} x2={228} y2={105}/><Seg x1={228} y1={105} x2={232} y2={140}/>
+      </g>
+      <Arr x1={208} y1={88} x2={195} y2={88} color={PK}/>
+      <Cue x={193} y={105} text="hips forward" anchor="end"/>
+      <Cue x={210} y={155} text="tuck pelvis gently"/>
+    </svg>
+  ),
+
+  "Ankle Circles + Calf Raises": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="ankle circles"/>
+      <FL x={210} text="calf raise — on toes"/>
+      {/* LEFT: one foot lifted, circle below */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={65} cy={32} r={9}/><Seg x1={65} y1={41} x2={65} y2={80}/>
+        <Seg x1={65} y1={55} x2={46} y2={68}/><Seg x1={65} y1={55} x2={84} y2={64}/>
+        <Seg x1={57} y1={80} x2={52} y2={115}/><Seg x1={52} y1={115} x2={50} y2={140}/>
+        <Seg x1={73} y1={80} x2={85} y2={108}/><Seg x1={85} y1={108} x2={92} y2={132}/>
+      </g>
+      <ellipse cx={91} cy={148} rx={14} ry={7} fill="none" stroke={PK} strokeWidth={1.8} strokeDasharray="4 2.5"/>
+      <Arr x1={104} y1={145} x2={105} y2={152} color={PK}/>
+      <Cue x={91} y={162} text="slow circles both ways"/>
+      {/* RIGHT: standing, heel lifted — faded start + bright end */}
+      <g color="#9a7a7a" opacity={0.4}>
+        <Head cx={210} cy={32} r={9}/><Seg x1={210} y1={41} x2={210} y2={80}/>
+        <Seg x1={210} y1={55} x2={192} y2={68}/><Seg x1={210} y1={55} x2={228} y2={68}/>
+        <Seg x1={202} y1={80} x2={198} y2={115}/><Seg x1={198} y1={115} x2={195} y2={140}/>
+        <Seg x1={218} y1={80} x2={222} y2={115}/><Seg x1={222} y1={115} x2={225} y2={140}/>
+      </g>
+      {/* raised position */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={18} r={9}/><Seg x1={210} y1={27} x2={210} y2={66}/>
+        <Seg x1={210} y1={42} x2={192} y2={54}/><Seg x1={210} y1={42} x2={228} y2={54}/>
+        <Seg x1={202} y1={66} x2={197} y2={105}/><Seg x1={197} y1={105} x2={192} y2={126}/>
+        <Seg x1={218} y1={66} x2={223} y2={105}/><Seg x1={223} y1={105} x2={228} y2={126}/>
+        {/* toes on floor, heel lifted */}
+        <Seg x1={192} y1={126} x2={200} y2={140}/>
+        <Seg x1={228} y1={126} x2={236} y2={140}/>
+      </g>
+      <line x1={185} y1={140} x2={192} y2={126} stroke={PK} strokeWidth={1.5} strokeDasharray="3 2"/>
+      <line x1={225} y1={140} x2={228} y2={126} stroke={PK} strokeWidth={1.5} strokeDasharray="3 2"/>
+      <Arr x1={245} y1={100} x2={245} y2={72} color={PK}/>
+      <Cue x={248} y={88} text="rise" anchor="start"/>
+    </svg>
+  ),
+
+  // ─── PHASE 2 ─────────────────────────────────────────────────────────
+  "Ball Wall Squat": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="standing — ball on wall"/>
+      <FL x={210} text="lower to 90°"/>
+      {/* wall */}
+      <line x1={115} y1={10} x2={115} y2={140} stroke={PK} strokeWidth={3} strokeOpacity={0.18} strokeLinecap="round"/>
+      <line x1={250} y1={10} x2={250} y2={140} stroke={PK} strokeWidth={3} strokeOpacity={0.18} strokeLinecap="round"/>
+      {/* LEFT: standing, ball behind back */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={88} cy={35} r={9}/><Seg x1={88} y1={44} x2={88} y2={85}/>
+        <Seg x1={88} y1={58} x2={70} y2={72}/><Seg x1={88} y1={58} x2={106} y2={68}/>
+        <Seg x1={80} y1={85} x2={76} y2={140}/><Seg x1={96} y1={85} x2={100} y2={140}/>
+      </g>
+      <Ball cx={107} cy={68} r={12}/>
+      {/* RIGHT: squatting, 90 degrees */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={225} cy={52} r={9}/><Seg x1={225} y1={61} x2={228} y2={92}/>
+        <Seg x1={225} y1={74} x2={207} y2={85}/><Seg x1={225} y1={74} x2={243} y2={82}/>
+        <Seg x1={220} y1={92} x2={200} y2={108}/><Seg x1={200} y1={108} x2={196} y2={140}/>
+        <Seg x1={236} y1={92} x2={250} y2={108}/><Seg x1={250} y1={108} x2={254} y2={140}/>
+      </g>
+      <Ball cx={244} cy={80} r={12}/>
+      <Arr x1={225} y1={74} x2={225} y2={95} color={PK}/>
+      <Cue x={210} y={155} text="knees track over toes"/>
+    </svg>
+  ),
+
+  "Single-Leg Glute Bridge": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="hips down, one leg up"/>
+      <FL x={210} text="drive hips up"/>
+      {/* LEFT: on back, one leg up */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={28} cy={125} r={9}/>
+        <Seg x1={37} y1={125} x2={100} y2={125}/>
+        <Seg x1={50} y1={125} x2={45} y2={145}/>
+        <Seg x1={100} y1={125} x2={112} y2={108}/><Seg x1={112} y1={108} x2={120} y2={125}/>
+        <Seg x1={108} y1={125} x2={126} y2={100}/>
+      </g>
+      {/* RIGHT: hips bridged, one leg extended */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={155} cy={125} r={9}/>
+        <Seg x1={164} y1={125} x2={195} y2={112}/>
+        <Seg x1={195} y1={112} x2={225} y2={118}/>
+        <Seg x1={166} y1={125} x2={160} y2={145}/>
+        <Seg x1={225} y1={118} x2={237} y2={102}/><Seg x1={237} y1={102} x2={245} y2={120}/>
+        <Seg x1={232} y1={118} x2={260} y2={105}/>
+      </g>
+      <Arr x1={198} y1={128} x2={198} y2={108} color={PK}/>
+      <Cue x={198} y={155} text="squeeze glute at top"/>
+    </svg>
+  ),
+
+  "Lateral Band Walk (wide stance)": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="wide squat stance"/>
+      <FL x={210} text="step sideways, stay low"/>
+      {/* band */}
+      <line x1={28} y1={128} x2={112} y2={128} stroke={PK} strokeWidth={2} strokeDasharray="4 2.5" strokeOpacity={0.6}/>
+      <line x1={168} y1={128} x2={252} y2={128} stroke={PK} strokeWidth={2} strokeDasharray="4 2.5" strokeOpacity={0.6}/>
+      {/* LEFT: wide squat */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={70} cy={52} r={9}/><Seg x1={70} y1={61} x2={70} y2={90}/>
+        <Seg x1={70} y1={72} x2={50} y2={82}/><Seg x1={70} y1={72} x2={90} y2={82}/>
+        <Seg x1={62} y1={90} x2={38} y2={108}/><Seg x1={38} y1={108} x2={32} y2={140}/>
+        <Seg x1={78} y1={90} x2={102} y2={108}/><Seg x1={102} y1={108} x2={108} y2={140}/>
+      </g>
+      {/* RIGHT: stepped sideways */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={52} r={9}/><Seg x1={210} y1={61} x2={210} y2={90}/>
+        <Seg x1={210} y1={72} x2={190} y2={82}/><Seg x1={210} y1={72} x2={230} y2={82}/>
+        <Seg x1={202} y1={90} x2={175} y2={108}/><Seg x1={175} y1={108} x2={168} y2={140}/>
+        <Seg x1={218} y1={90} x2={245} y2={108}/><Seg x1={245} y1={108} x2={252} y2={140}/>
+      </g>
+      <Arr x1={126} y1={88} x2={154} y2={88} color={PK}/>
+      <Cue x={140} y={155} text="resist band, stay low"/>
+    </svg>
+  ),
+
+  "Ball Hamstring Curl": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="hips up, legs straight"/>
+      <FL x={210} text="curl ball in"/>
+      {/* LEFT: bridge with legs straight on ball */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={22} cy={118} r={9}/>
+        <Seg x1={31} y1={118} x2={80} y2={108}/>
+        <Seg x1={80} y1={108} x2={118} y2={115}/>
+        <Seg x1={24} y1={118} x2={18} y2={138}/>
+        <Seg x1={118} y1={115} x2={135} y2={115}/>
+      </g>
+      <Ball cx={108} cy={128} r={13}/>
+      {/* RIGHT: ball curled in, knees bent, hips higher */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={152} cy={118} r={9}/>
+        <Seg x1={161} y1={118} x2={205} y2={102}/>
+        <Seg x1={205} y1={102} x2={228} y2={112}/>
+        <Seg x1={154} y1={118} x2={148} y2={138}/>
+        <Seg x1={228} y1={112} x2={235} y2={128}/>
+        <Seg x1={235} y1={128} x2={228} y2={140}/>
+        <Seg x1={225} y1={112} x2={232} y2={128}/>
+      </g>
+      <Ball cx={238} cy={130} r={13}/>
+      <Arr x1={268} y1={115} x2={248} y2={115} color={PK}/>
+      <Cue x={210} y={156} text="drive heels into ball"/>
+    </svg>
+  ),
+
+  "Step-Back Lunge": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="standing"/>
+      <FL x={210} text="step back, lower down"/>
+      {/* LEFT */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={70} cy={35} r={9}/><Seg x1={70} y1={44} x2={70} y2={85}/>
+        <Seg x1={70} y1={58} x2={52} y2={72}/><Seg x1={70} y1={58} x2={88} y2={72}/>
+        <Seg x1={62} y1={85} x2={58} y2={140}/><Seg x1={78} y1={85} x2={82} y2={140}/>
+      </g>
+      {/* RIGHT: step back lunge */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={205} cy={35} r={9}/><Seg x1={205} y1={44} x2={205} y2={82}/>
+        <Seg x1={205} y1={58} x2={188} y2={70}/><Seg x1={205} y1={58} x2={222} y2={68}/>
+        <Seg x1={197} y1={82} x2={178} y2={100}/><Seg x1={178} y1={100} x2={165} y2={140}/>
+        <Seg x1={213} y1={82} x2={235} y2={100}/><Seg x1={235} y1={100} x2={240} y2={140}/>
+      </g>
+      <Arr x1={240} y1={60} x2={255} y2={75} color={PK}/>
+      <Cue x={256} y={72} text="step back" anchor="start"/>
+      <Arr x1={205} y1={72} x2={205} y2={90} color={PK}/>
+      <Cue x={205} y={155} text="back knee hovers above floor"/>
+    </svg>
+  ),
+
+  "Calf Raise on Step": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <rect x={50} y={118} width={80} height={14} rx={3} fill="rgba(212,116,138,0.1)" stroke={PK} strokeWidth={1.2} strokeOpacity={0.4}/>
+      <rect x={186} y={118} width={80} height={14} rx={3} fill="rgba(212,116,138,0.1)" stroke={PK} strokeWidth={1.2} strokeOpacity={0.4}/>
+      <Floor2 y={132} x1={30} x2={145}/>
+      <Floor2 y={132} x1={165} x2={280}/>
+      <Divider h={145}/>
+      <FL x={70} text="heels hanging off step"/>
+      <FL x={210} text="rise onto toes"/>
+      {/* LEFT: heels dropped below step */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={90} cy={28} r={9}/><Seg x1={90} y1={37} x2={90} y2={78}/>
+        <Seg x1={90} y1={52} x2={72} y2={64}/><Seg x1={90} y1={52} x2={108} y2={64}/>
+        <Seg x1={82} y1={78} x2={78} y2={118}/><Seg x1={78} y1={118} x2={76} y2={135}/>
+        <Seg x1={98} y1={78} x2={102} y2={118}/><Seg x1={102} y1={118} x2={104} y2={135}/>
+      </g>
+      {/* RIGHT: on toes, body lifted */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={226} cy={14} r={9}/><Seg x1={226} y1={23} x2={226} y2={64}/>
+        <Seg x1={226} y1={38} x2={208} y2={50}/><Seg x1={226} y1={38} x2={244} y2={50}/>
+        <Seg x1={218} y1={64} x2={214} y2={105}/><Seg x1={214} y1={105} x2={212} y2={118}/>
+        <Seg x1={234} y1={64} x2={238} y2={105}/><Seg x1={238} y1={105} x2={240} y2={118}/>
+        <Seg x1={212} y1={118} x2={218} y2={132}/>
+        <Seg x1={240} y1={118} x2={246} y2={132}/>
+      </g>
+      <line x1={206} y1={132} x2={212} y2={118} stroke={PK} strokeWidth={1.5} strokeDasharray="3 2"/>
+      <line x1={242} y1={132} x2={240} y2={118} stroke={PK} strokeWidth={1.5} strokeDasharray="3 2"/>
+      <Arr x1={258} y1={78} x2={258} y2={52} color={PK}/>
+      <Cue x={261} y={66} text="rise" anchor="start"/>
+    </svg>
+  ),
+
+  "Ball Push-Up": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={142}/>
+      <Divider h={152}/>
+      <FL x={70} text="arms bent — lower"/>
+      <FL x={210} text="arms straight — up"/>
+      {/* Ball LEFT */}
+      <Ball cx={72} cy={120} r={16}/>
+      {/* LEFT: chest low, elbows bent */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={22} cy={88} r={9}/>
+        <Seg x1={31} y1={88} x2={72} y2={104}/>
+        <Seg x1={48} y1={95} x2={56} y2={112}/>
+        <Seg x1={60} y1={100} x2={66} y2={115}/>
+        <Seg x1={72} y1={104} x2={118} y2={112}/>
+        <Seg x1={118} y1={112} x2={128} y2={142}/>
+      </g>
+      {/* Ball RIGHT */}
+      <Ball cx={210} cy={118} r={16}/>
+      {/* RIGHT: arms extended */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={158} cy={62} r={9}/>
+        <Seg x1={167} y1={62} x2={210} y2={102}/>
+        <Seg x1={182} y1={74} x2={195} y2={108}/>
+        <Seg x1={197} y1={82} x2={208} y2={112}/>
+        <Seg x1={210} y1={102} x2={260} y2={112}/>
+        <Seg x1={260} y1={112} x2={270} y2={142}/>
+      </g>
+      <Arr x1={158} y1={95} x2={158} y2={72} color={PK}/>
+      <Cue x={158} y={156} text="elbows close to body"/>
+    </svg>
+  ),
+
+  "Ball Prone Y-T-W": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Divider h={145}/>
+      <FL x={70} text="Y — arms up diagonal"/>
+      <FL x={210} text="T — arms straight out"/>
+      {/* Ball LEFT */}
+      <Ball cx={68} cy={100} r={18}/>
+      {/* LEFT Y shape — chest on ball, arms in Y */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={68} cy={62} r={9}/>
+        <Seg x1={68} y1={71} x2={68} y2={92}/>
+        <Seg x1={68} y1={82} x2={38} y2={55}/>
+        <Seg x1={68} y1={82} x2={98} y2={55}/>
+        <Seg x1={68} y1={92} x2={68} y2={118}/>
+      </g>
+      <Cue x={68} y={142} text="squeeze shoulder blades"/>
+      {/* Ball RIGHT */}
+      <Ball cx={210} cy={100} r={18}/>
+      {/* RIGHT T shape — arms horizontal */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={62} r={9}/>
+        <Seg x1={210} y1={71} x2={210} y2={92}/>
+        <Seg x1={210} y1={80} x2={172} y2={80}/>
+        <Seg x1={210} y1={80} x2={248} y2={80}/>
+        <Seg x1={210} y1={92} x2={210} y2={118}/>
+      </g>
+      <Arr x1={168} y1={76} x2={155} y2={76} color={PK}/>
+      <Arr x1={252} y1={76} x2={265} y2={76} color={PK}/>
+      <Cue x={210} y={142} text="small controlled movement"/>
+    </svg>
+  ),
+
+  "Pike Push-Up": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="inverted V — start"/>
+      <FL x={210} text="lower head toward floor"/>
+      {/* LEFT: pike position, arms straight */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={55} cy={48} r={9}/>
+        <Seg x1={55} y1={57} x2={62} y2={88}/>
+        <Seg x1={62} y1={88} x2={45} y2={140}/>
+        <Seg x1={62} y1={88} x2={75} y2={140}/>
+        <Seg x1={55} y1={68} x2={30} y2={90}/>
+        <Seg x1={30} y1={90} x2={18} y2={110}/>
+      </g>
+      {/* RIGHT: head lowered, elbows bent */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={195} cy={72} r={9}/>
+        <Seg x1={195} y1={81} x2={202} y2={108}/>
+        <Seg x1={202} y1={108} x2={185} y2={140}/>
+        <Seg x1={202} y1={108} x2={215} y2={140}/>
+        <Seg x1={195} y1={90} x2={172} y2={104}/>
+        <Seg x1={172} y1={104} x2={158} y2={118}/>
+      </g>
+      <Arr x1={195} y1={52} x2={195} y2={70} color={PK}/>
+      <Cue x={195} y={155} text="lower nose toward floor"/>
+    </svg>
+  ),
+
+  "Tricep Dip (off chair)": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      {/* chairs */}
+      <rect x={28} y={92} width={65} height={8} rx={2} fill="rgba(212,116,138,0.12)" stroke={PK} strokeWidth={1} strokeOpacity={0.4}/>
+      <line x1={32} y1={100} x2={32} y2={140} stroke={PK} strokeWidth={1.5} strokeOpacity={0.3}/>
+      <line x1={88} y1={100} x2={88} y2={140} stroke={PK} strokeWidth={1.5} strokeOpacity={0.3}/>
+      <rect x={175} y={92} width={65} height={8} rx={2} fill="rgba(212,116,138,0.12)" stroke={PK} strokeWidth={1} strokeOpacity={0.4}/>
+      <line x1={179} y1={100} x2={179} y2={140} stroke={PK} strokeWidth={1.5} strokeOpacity={0.3}/>
+      <line x1={235} y1={100} x2={235} y2={140} stroke={PK} strokeWidth={1.5} strokeOpacity={0.3}/>
+      <Divider h={152}/>
+      <FL x={70} text="arms straight — start"/>
+      <FL x={210} text="elbows bend — lower"/>
+      {/* LEFT: arms straight */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={60} cy={48} r={9}/><Seg x1={60} y1={57} x2={60} y2={88}/>
+        <Seg x1={60} y1={70} x2={38} y2={92}/><Seg x1={60} y1={70} x2={82} y2={92}/>
+        <Seg x1={52} y1={88} x2={38} y2={140}/><Seg x1={68} y1={88} x2={82} y2={140}/>
+      </g>
+      {/* RIGHT: elbows bent, body lowered */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={208} cy={65} r={9}/><Seg x1={208} y1={74} x2={208} y2={102}/>
+        <Seg x1={208} y1={82} x2={185} y2={92}/><Seg x1={208} y1={82} x2={231} y2={92}/>
+        <Seg x1={200} y1={102} x2={179} y2={140}/><Seg x1={216} y1={102} x2={235} y2={140}/>
+      </g>
+      <Arr x1={208} y1={58} x2={208} y2={73} color={PK}/>
+      <Cue x={208} y={155} text="elbows track straight back"/>
+    </svg>
+  ),
+
+  "Lateral Shuffle (slow)": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="athletic stance — ready"/>
+      <FL x={210} text="push off, step, stick"/>
+      {/* LEFT: low stance */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={70} cy={48} r={9}/><Seg x1={70} y1={57} x2={70} y2={88}/>
+        <Seg x1={70} y1={68} x2={50} y2={80}/><Seg x1={70} y1={68} x2={90} y2={80}/>
+        <Seg x1={62} y1={88} x2={42} y2={108}/><Seg x1={42} y1={108} x2={36} y2={140}/>
+        <Seg x1={78} y1={88} x2={100} y2={108}/><Seg x1={100} y1={108} x2={106} y2={140}/>
+      </g>
+      <Arr x1={120} y1={88} x2={150} y2={88} color={PK}/>
+      {/* RIGHT: mid-shuffle */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={48} r={9}/><Seg x1={210} y1={57} x2={210} y2={88}/>
+        <Seg x1={210} y1={68} x2={188} y2={78}/><Seg x1={210} y1={68} x2={232} y2={78}/>
+        <Seg x1={202} y1={88} x2={175} y2={110}/><Seg x1={175} y1={110} x2={168} y2={140}/>
+        <Seg x1={218} y1={88} x2={245} y2={106}/><Seg x1={245} y1={106} x2={252} y2={140}/>
+      </g>
+      <Cue x={140} y={155} text="stay low, soft knees"/>
+    </svg>
+  ),
+
+  "Pivot Steps": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="plant outside foot"/>
+      <FL x={210} text="pivot — rotate body"/>
+      {/* LEFT: ready stance */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={68} cy={42} r={9}/><Seg x1={68} y1={51} x2={68} y2={85}/>
+        <Seg x1={68} y1={64} x2={48} y2={76}/><Seg x1={68} y1={64} x2={88} y2={76}/>
+        <Seg x1={60} y1={85} x2={45} y2={108}/><Seg x1={45} y1={108} x2={38} y2={140}/>
+        <Seg x1={76} y1={85} x2={92} y2={108}/><Seg x1={92} y1={108} x2={98} y2={140}/>
+      </g>
+      {/* pivot arc on floor */}
+      <path d="M38,140 A38,22 0 0,0 98,140" fill="none" stroke={PK} strokeWidth={1.5} strokeDasharray="4 2.5" strokeOpacity={0.7}/>
+      <Arr x1={94} y1={141} x2={100} y2={130} color={PK}/>
+      {/* RIGHT: mid-pivot, body rotated */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={42} r={9}/><Seg x1={210} y1={51} x2={208} y2={85}/>
+        <Seg x1={208} y1={64} x2={185} y2={72}/><Seg x1={208} y1={64} x2={232} y2={70}/>
+        <Seg x1={200} y1={85} x2={178} y2={105}/><Seg x1={178} y1={105} x2={172} y2={140}/>
+        <Seg x1={216} y1={85} x2={238} y2={105}/><Seg x1={238} y1={105} x2={244} y2={140}/>
+      </g>
+      <Cue x={140} y={155} text="outside foot stays planted"/>
+    </svg>
+  ),
+
+  "Forward/Back Hop": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="push off"/>
+      <FL x={210} text="land softly"/>
+      {/* LEFT: crouching to jump */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={68} cy={52} r={9}/><Seg x1={68} y1={61} x2={68} y2={90}/>
+        <Seg x1={68} y1={72} x2={50} y2={82}/><Seg x1={68} y1={72} x2={86} y2={82}/>
+        <Seg x1={60} y1={90} x2={44} y2={110}/><Seg x1={44} y1={110} x2={38} y2={140}/>
+        <Seg x1={76} y1={90} x2={92} y2={110}/><Seg x1={92} y1={110} x2={98} y2={140}/>
+      </g>
+      <Arr x1={120} y1={95} x2={148} y2={95} color={PK}/>
+      {/* RIGHT: landing soft knees bent */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={48} r={9}/><Seg x1={210} y1={57} x2={210} y2={88}/>
+        <Seg x1={210} y1={68} x2={190} y2={78}/><Seg x1={210} y1={68} x2={230} y2={78}/>
+        <Seg x1={202} y1={88} x2={186} y2={108}/><Seg x1={186} y1={108} x2={180} y2={140}/>
+        <Seg x1={218} y1={88} x2={234} y2={108}/><Seg x1={234} y1={108} x2={240} y2={140}/>
+      </g>
+      <Arr x1={210} y1={100} x2={210} y2={115} color={PK}/>
+      <Cue x={210} y={155} text="toes first, absorb impact"/>
+    </svg>
+  ),
+
+  // ─── PHASE 3 ─────────────────────────────────────────────────────────
+  "Jump Squat (low height)": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="squat — load up"/>
+      <FL x={210} text="jump — land softly"/>
+      {/* LEFT: squat */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={68} cy={58} r={9}/><Seg x1={68} y1={67} x2={68} y2={95}/>
+        <Seg x1={68} y1={78} x2={48} y2={88}/><Seg x1={68} y1={78} x2={88} y2={88}/>
+        <Seg x1={60} y1={95} x2={42} y2={112}/><Seg x1={42} y1={112} x2={36} y2={140}/>
+        <Seg x1={76} y1={95} x2={96} y2={112}/><Seg x1={96} y1={112} x2={102} y2={140}/>
+      </g>
+      <Arr x1={120} y1={95} x2={148} y2={78} color={PK}/>
+      {/* RIGHT: in air, feet together */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={28} r={9}/><Seg x1={210} y1={37} x2={210} y2={72}/>
+        <Seg x1={210} y1={52} x2={190} y2={62}/><Seg x1={210} y1={52} x2={230} y2={62}/>
+        <Seg x1={202} y1={72} x2={192} y2={95}/><Seg x1={192} y1={95} x2={186} y2={112}/>
+        <Seg x1={218} y1={72} x2={228} y2={95}/><Seg x1={228} y1={95} x2={234} y2={112}/>
+      </g>
+      <Arr x1={210} y1={105} x2={210} y2={125} color={PK}/>
+      <Cue x={210} y={155} text="toes → ball → heel on land"/>
+    </svg>
+  ),
+
+  "Lateral Bound": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="load outside leg"/>
+      <FL x={210} text="bound + stick landing"/>
+      {/* LEFT: coiling on one leg */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={62} cy={52} r={9}/><Seg x1={62} y1={61} x2={65} y2={88}/>
+        <Seg x1={62} y1={72} x2={42} y2={80}/><Seg x1={62} y1={72} x2={82} y2={78}/>
+        <Seg x1={57} y1={88} x2={42} y2={108}/><Seg x1={42} y1={108} x2={36} y2={140}/>
+        <Seg x1={73} y1={88} x2={80} y2={108}/>
+      </g>
+      <Arr x1={118} y1={90} x2={150} y2={80} color={PK}/>
+      {/* RIGHT: sticking single-leg landing */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={220} cy={52} r={9}/><Seg x1={220} y1={61} x2={218} y2={88}/>
+        <Seg x1={220} y1={72} x2={200} y2={78}/><Seg x1={220} y1={72} x2={240} y2={80}/>
+        <Seg x1={212} y1={88} x2={200} y2={110}/><Seg x1={200} y1={110} x2={196} y2={140}/>
+        <Seg x1={224} y1={88} x2={228} y2={105}/>
+      </g>
+      <Cue x={210} y={155} text="hold landing 2 full seconds"/>
+    </svg>
+  ),
+
+  "Split Jump": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="lunge — load up"/>
+      <FL x={210} text="jump — switch legs"/>
+      {/* LEFT: lunge down */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={68} cy={38} r={9}/><Seg x1={68} y1={47} x2={68} y2={82}/>
+        <Seg x1={68} y1={60} x2={50} y2={72}/><Seg x1={68} y1={60} x2={86} y2={72}/>
+        <Seg x1={60} y1={82} x2={40} y2={100}/><Seg x1={40} y1={100} x2={32} y2={140}/>
+        <Seg x1={76} y1={82} x2={95} y2={100}/><Seg x1={95} y1={100} x2={100} y2={140}/>
+      </g>
+      <Arr x1={120} y1={88} x2={148} y2={72} color={PK}/>
+      {/* RIGHT: in air, legs switching */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={28} r={9}/><Seg x1={210} y1={37} x2={210} y2={68}/>
+        <Seg x1={210} y1={52} x2={190} y2={60}/><Seg x1={210} y1={52} x2={230} y2={60}/>
+        <Seg x1={202} y1={68} x2={175} y2={90}/><Seg x1={175} y1={90} x2={162} y2={115}/>
+        <Seg x1={218} y1={68} x2={242} y2={90}/><Seg x1={242} y1={90} x2={252} y2={112}/>
+      </g>
+      <Cue x={210} y={155} text="power from back leg"/>
+    </svg>
+  ),
+
+  "Reactive Lateral Shuffle": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="accelerate"/>
+      <FL x={210} text="decelerate + change"/>
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={65} cy={48} r={9}/><Seg x1={65} y1={57} x2={65} y2={88}/>
+        <Seg x1={65} y1={68} x2={45} y2={78}/><Seg x1={65} y1={68} x2={85} y2={78}/>
+        <Seg x1={57} y1={88} x2={38} y2={108}/><Seg x1={38} y1={108} x2={32} y2={140}/>
+        <Seg x1={73} y1={88} x2={95} y2={108}/><Seg x1={95} y1={108} x2={101} y2={140}/>
+      </g>
+      <Arr x1={115} y1={80} x2={148} y2={80} color={PK}/>
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={215} cy={52} r={9}/><Seg x1={215} y1={61} x2={213} y2={90}/>
+        <Seg x1={213} y1={72} x2={192} y2={80}/><Seg x1={213} y1={72} x2={235} y2={80}/>
+        <Seg x1={205} y1={90} x2={182} y2={110}/><Seg x1={182} y1={110} x2={175} y2={140}/>
+        <Seg x1={221} y1={90} x2={248} y2={108}/><Seg x1={248} y1={108} x2={254} y2={140}/>
+      </g>
+      <Arr x1={268} y1={80} x2={255} y2={80} color={PK}/>
+      <Cue x={140} y={155} text="control the stop — don't drift"/>
+    </svg>
+  ),
+
+  "Ball Drop Squat": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="toss ball up"/>
+      <FL x={210} text="drop + catch"/>
+      {/* LEFT: tossing ball */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={70} cy={42} r={9}/><Seg x1={70} y1={51} x2={70} y2={88}/>
+        <Seg x1={70} y1={64} x2={52} y2={72}/><Seg x1={70} y1={64} x2={88} y2={72}/>
+        <Seg x1={62} y1={88} x2={56} y2={140}/><Seg x1={78} y1={88} x2={84} y2={140}/>
+      </g>
+      <Ball cx={70} cy={22} r={10}/>
+      <Arr x1={70} y1={32} x2={70} y2={42} color={PK}/>
+      {/* RIGHT: squat catching ball */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={58} r={9}/><Seg x1={210} y1={67} x2={210} y2={98}/>
+        <Seg x1={210} y1={80} x2={188} y2={70}/><Seg x1={210} y1={80} x2={232} y2={70}/>
+        <Seg x1={202} y1={98} x2={182} y2={115}/><Seg x1={182} y1={115} x2={175} y2={140}/>
+        <Seg x1={218} y1={98} x2={238} y2={115}/><Seg x1={238} y1={115} x2={245} y2={140}/>
+      </g>
+      <Ball cx={210} cy={52} r={10}/>
+      <Arr x1={210} y1={42} x2={210} y2={55} color={PK}/>
+      <Cue x={210} y={155} text="fast drop, absorb with legs"/>
+    </svg>
+  ),
+
+  "Single Leg Balance to Hop": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="balance 2 seconds"/>
+      <FL x={210} text="small hop + rebalance"/>
+      {/* LEFT: single leg balance */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={65} cy={35} r={9}/><Seg x1={65} y1={44} x2={65} y2={82}/>
+        <Seg x1={65} y1={58} x2={46} y2={70}/><Seg x1={65} y1={58} x2={84} y2={68}/>
+        <Seg x1={57} y1={82} x2={52} y2={118}/><Seg x1={52} y1={118} x2={48} y2={140}/>
+        <Seg x1={73} y1={82} x2={85} y2={104}/>
+      </g>
+      <Arr x1={118} y1={88} x2={148} y2={78} color={PK}/>
+      {/* RIGHT: landing back on one leg */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={215} cy={35} r={9}/><Seg x1={215} y1={44} x2={213} y2={80}/>
+        <Seg x1={213} y1={58} x2={194} y2={70}/><Seg x1={213} y1={58} x2={232} y2={68}/>
+        <Seg x1={205} y1={80} x2={198} y2={110}/><Seg x1={198} y1={110} x2={194} y2={140}/>
+        <Seg x1={221} y1={80} x2={232} y2={102}/>
+      </g>
+      <Arr x1={213} y1={105} x2={213} y2={120} color={PK}/>
+      <Cue x={213} y={155} text="absorb landing, hold still"/>
+    </svg>
+  ),
+
+  "Ball Rollout": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="kneeling — start"/>
+      <FL x={210} text="roll forward — hold"/>
+      {/* Ball LEFT */}
+      <Ball cx={75} cy={128} r={13}/>
+      {/* LEFT: upright kneeling, hands on ball */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={68} cy={48} r={9}/><Seg x1={68} y1={57} x2={68} y2={88}/>
+        <Seg x1={68} y1={70} x2={50} y2={80}/><Seg x1={68} y1={70} x2={86} y2={80}/>
+        <Seg x1={60} y1={88} x2={52} y2={112}/><Seg x1={52} y1={112} x2={48} y2={140}/>
+        <Seg x1={76} y1={88} x2={82} y2={112}/><Seg x1={82} y1={112} x2={86} y2={140}/>
+        <Seg x1={55} y1={80} x2={65} y2={115}/>
+        <Seg x1={81} y1={80} x2={85} y2={115}/>
+      </g>
+      {/* Ball RIGHT */}
+      <Ball cx={240} cy={118} r={13}/>
+      {/* RIGHT: rolled out, body extended */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={155} cy={68} r={9}/>
+        <Seg x1={164} y1={68} x2={210} y2={100}/>
+        <Seg x1={178} y1={76} x2={222} y2={108}/>
+        <Seg x1={188} y1={82} x2={230} y2={112}/>
+        <Seg x1={210} y1={100} x2={195} y2={128}/><Seg x1={195} y1={128} x2={185} y2={140}/>
+        <Seg x1={218} y1={102} x2={205} y2={130}/><Seg x1={205} y1={130} x2={196} y2={140}/>
+      </g>
+      <Arr x1={120} y1={85} x2={148} y2={95} color={PK}/>
+      <Cue x={210} y={155} text="go only as far as core holds"/>
+    </svg>
+  ),
+
+  "Plank to Rotation": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="plank — start"/>
+      <FL x={210} text="rotate hip to ceiling"/>
+      {/* LEFT: plank */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={22} cy={72} r={9}/>
+        <Seg x1={31} y1={72} x2={95} y2={80}/>
+        <Seg x1={40} y1={75} x2={36} y2={100}/>
+        <Seg x1={85} y1={79} x2={82} y2={105}/>
+        <Seg x1={95} y1={80} x2={118} y2={85}/><Seg x1={118} y1={85} x2={125} y2={112}/>
+        <Seg x1={105} y1={82} x2={128} y2={86}/><Seg x1={128} y1={86} x2={134} y2={112}/>
+      </g>
+      {/* RIGHT: side plank / rotation */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={155} cy={68} r={9}/>
+        <Seg x1={164} y1={68} x2={222} y2={82}/>
+        <Seg x1={175} y1={72} x2={172} y2={100}/>
+        <Seg x1={222} y1={82} x2={245} y2={88}/><Seg x1={245} y1={88} x2={252} y2={115}/>
+        <Seg x1={232} y1={84} x2={255} y2={90}/><Seg x1={255} y1={90} x2={260} y2={115}/>
+        {/* arm rotated up */}
+        <Seg x1={190} y1={76} x2={178} y2={50}/>
+      </g>
+      <Arr x1={180} y1={55} x2={170} y2={42} color={PK}/>
+      <Cue x={175} y={38} text="reach up" anchor="end"/>
+      <Cue x={210} y={155} text="hips stack, don't collapse"/>
+    </svg>
+  ),
+
+  "Dead Bug with Ball": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="start — ball squeezed"/>
+      <FL x={210} text="lower opposite arm + leg"/>
+      {/* LEFT: lying, arms/legs up, ball overhead */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={30} cy={118} r={9}/>
+        <Seg x1={39} y1={118} x2={88} y2={115}/>
+        <Seg x1={52} y1={116} x2={48} y2={92}/><Seg x1={60} y1={116} x2={62} y2={92}/>
+        <Seg x1={88} y1={115} x2={104} y2={98}/><Seg x1={104} y1={98} x2={112} y2={112}/>
+        <Seg x1={95} y1={115} x2={112} y2={98}/><Seg x1={112} y1={98} x2={120} y2={112}/>
+      </g>
+      <Ball cx={54} cy={80} r={11}/>
+      {/* RIGHT: opposite arm + leg lowered */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={160} cy={118} r={9}/>
+        <Seg x1={169} y1={118} x2={218} y2={115}/>
+        <Seg x1={182} y1={116} x2={175} y2={92}/><Seg x1={190} y1={116} x2={190} y2={92}/>
+        {/* arm lowered */}
+        <Seg x1={178} y1={94} x2={162} y2={80}/>
+        <Seg x1={218} y1={115} x2={235} y2={98}/><Seg x1={235} y1={98} x2={243} y2={112}/>
+        {/* leg lowered */}
+        <Seg x1={225} y1={115} x2={250} y2={128}/><Seg x1={250} y1={128} x2={268} y2={138}/>
+      </g>
+      <Ball cx={184} cy={80} r={11}/>
+      <Cue x={210} y={156} text="lower back stays flat on floor"/>
+    </svg>
+  ),
+
+  "Ball Russian Twist": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="ball left side"/>
+      <FL x={210} text="rotate — ball right"/>
+      {/* LEFT: V-sit, ball rotated left */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={68} cy={52} r={9}/><Seg x1={68} y1={61} x2={68} y2={90}/>
+        <Seg x1={60} y1={90} x2={40} y2={108}/><Seg x1={40} y1={108} x2={32} y2={140}/>
+        <Seg x1={76} y1={90} x2={98} y2={108}/><Seg x1={98} y1={108} x2={104} y2={140}/>
+        <Seg x1={68} y1={72} x2={45} y2={68}/>
+      </g>
+      <Ball cx={35} cy={66} r={12}/>
+      {/* arrow */}
+      <Arr x1={126} y1={72} x2={148} y2={72} color={PK}/>
+      {/* RIGHT: ball rotated right */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={52} r={9}/><Seg x1={210} y1={61} x2={210} y2={90}/>
+        <Seg x1={202} y1={90} x2={182} y2={108}/><Seg x1={182} y1={108} x2={175} y2={140}/>
+        <Seg x1={218} y1={90} x2={240} y2={108}/><Seg x1={240} y1={108} x2={246} y2={140}/>
+        <Seg x1={210} y1={72} x2={235} y2={68}/>
+      </g>
+      <Ball cx={245} cy={66} r={12}/>
+      <Cue x={140} y={156} text="rotate from torso, not arms"/>
+    </svg>
+  ),
+
+  "Pallof Press (isometric hold)": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="hands at chest"/>
+      <FL x={210} text="press out — hold still"/>
+      {/* anchor + band LEFT */}
+      <circle cx={12} cy={80} r={5} fill={PK} opacity={0.35}/>
+      <line x1={17} y1={80} x2={48} y2={80} stroke={PK} strokeWidth={1.8} strokeDasharray="4 2.5" strokeOpacity={0.6}/>
+      <circle cx={12} cy={80} r={5} fill={PK} opacity={0.35}/>
+      <line x1={17} y1={80} x2={175} y2={80} stroke={PK} strokeWidth={1.8} strokeDasharray="4 2.5" strokeOpacity={0.6}/>
+      {/* LEFT: hands at chest */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={70} cy={38} r={9}/><Seg x1={70} y1={47} x2={70} y2={88}/>
+        <Seg x1={70} y1={62} x2={52} y2={72}/><Seg x1={70} y1={62} x2={88} y2={72}/>
+        <Seg x1={52} y1={72} x2={65} y2={82}/>
+        <Seg x1={62} y1={88} x2={56} y2={140}/><Seg x1={78} y1={88} x2={84} y2={140}/>
+      </g>
+      {/* RIGHT: arms extended, resisting */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={38} r={9}/><Seg x1={210} y1={47} x2={210} y2={88}/>
+        <Seg x1={210} y1={62} x2={185} y2={68}/><Seg x1={185} y1={68} x2={172} y2={80}/>
+        <Seg x1={210} y1={62} x2={230} y2={68}/>
+        <Seg x1={202} y1={88} x2={196} y2={140}/><Seg x1={218} y1={88} x2={224} y2={140}/>
+      </g>
+      <Arr x1={148} y1={88} x2={125} y2={88} color={PK}/>
+      <Cue x={175} y={80} text="←pull" anchor="end"/>
+      <Cue x={210} y={155} text="brace core — don't rotate"/>
+    </svg>
+  ),
+
+  // ─── BIKE WORKOUTS ───────────────────────────────────────────────────
+  "Warm-Up Spin": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Divider h={145}/>
+      <FL x={70} text="easy zone 1"/>
+      <FL x={210} text="conversational pace"/>
+      {/* Bike LEFT */}
+      <circle cx={45} cy={118} r={18} fill="none" stroke={PK} strokeWidth={1.8} strokeOpacity={0.35}/>
+      <circle cx={105} cy={118} r={18} fill="none" stroke={PK} strokeWidth={1.8} strokeOpacity={0.35}/>
+      <Seg x1={45} y1={100} x2={75} y2={80}/><Seg x1={75} y1={80} x2={105} y2={100}/>
+      <Seg x1={75} y1={80} x2={75} y2={100}/><Seg x1={65} y1={77} x2={85} y2={77}/>
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={68} cy={42} r={9}/><Seg x1={68} y1={51} x2={72} y2={80}/>
+        <Seg x1={70} y1={65} x2={52} y2={75}/><Seg x1={70} y1={68} x2={88} y2={88}/>
+      </g>
+      <Cue x={68} y={148} text="you can hold a conversation"/>
+      {/* Bike RIGHT */}
+      <circle cx={185} cy={118} r={18} fill="none" stroke={PK} strokeWidth={1.8} strokeOpacity={0.35}/>
+      <circle cx={245} cy={118} r={18} fill="none" stroke={PK} strokeWidth={1.8} strokeOpacity={0.35}/>
+      <Seg x1={185} y1={100} x2={215} y2={80}/><Seg x1={215} y1={80} x2={245} y2={100}/>
+      <Seg x1={215} y1={80} x2={215} y2={100}/><Seg x1={205} y1={77} x2={225} y2={77}/>
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={208} cy={42} r={9}/><Seg x1={208} y1={51} x2={212} y2={80}/>
+        <Seg x1={210} y1={65} x2={192} y2={75}/><Seg x1={210} y1={68} x2={228} y2={88}/>
+      </g>
+      {/* speech bubble */}
+      <rect x={220} y={28} width={50} height={22} rx={8} fill="rgba(212,116,138,0.1)" stroke={PK} strokeWidth={1} strokeOpacity={0.4}/>
+      <Cue x={245} y={43} text="la la la"/>
+      <Cue x={210} y={148} text="5 min easy spin"/>
+    </svg>
+  ),
+
+  "Steady State Ride": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Divider h={145}/>
+      <FL x={70} text="zone 2 effort"/>
+      <FL x={210} text="slight breathing effort"/>
+      {/* effort gauge LEFT */}
+      <path d="M30,100 A40,40 0 0,1 110,100" fill="none" stroke="rgba(212,116,138,0.15)" strokeWidth={10}/>
+      <path d="M30,100 A40,40 0 0,1 74,64" fill="none" stroke={PK} strokeWidth={10} strokeOpacity={0.5}/>
+      <Cue x={70} y={118} text="zone 2"/>
+      {/* effort gauge RIGHT (zone 3) */}
+      <path d="M170,100 A40,40 0 0,1 250,100" fill="none" stroke="rgba(212,116,138,0.15)" strokeWidth={10}/>
+      <path d="M170,100 A40,40 0 0,1 222,62" fill="none" stroke={PK} strokeWidth={10} strokeOpacity={0.35}/>
+      <Cue x={210} y={118} text="zone 3+"/>
+      {/* check and cross */}
+      <text x={70} y={78} fontSize="22" textAnchor="middle" fill={PK} opacity={0.7}>✓</text>
+      <text x={210} y={78} fontSize="22" textAnchor="middle" fill={PK} opacity={0.3}>✕</text>
+      <Cue x={70} y={145} text="slight effort — aim here"/>
+      <Cue x={210} y={145} text="don't push this hard yet"/>
+    </svg>
+  ),
+
+  "Cool-Down Spin": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Divider h={145}/>
+      <FL x={70} text="zone 2 → reduce"/>
+      <FL x={210} text="zone 1 finish"/>
+      {/* arrow showing drop */}
+      <Arr x1={70} y1={55} x2={140} y2={88} color={PK}/>
+      <Arr x1={140} y1={88} x2={210} y2={108} color={PK}/>
+      <Cue x={55} y={52} text="start here" anchor="end"/>
+      <Cue x={225} y={108} text="end here" anchor="start"/>
+      {/* HR drop visual */}
+      <path d="M40,70 L55,55 L65,80 L75,62 L85,75 L95,68 L105,72 L115,70 L130,70" fill="none" stroke={PK} strokeWidth={1.8} strokeOpacity={0.5} strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M150,88 L165,80 L175,88 L185,84 L195,86 L210,86 L225,87 L240,88" fill="none" stroke={PK} strokeWidth={1.8} strokeOpacity={0.35} strokeLinecap="round" strokeLinejoin="round"/>
+      <Cue x={85} y={100} text="heart rate coming down"/>
+      <Cue x={210} y={148} text="3 min gradual slowdown"/>
+    </svg>
+  ),
+
+  "Bike Intervals": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Divider h={145}/>
+      <FL x={70} text="2 min push — zone 3"/>
+      <FL x={210} text="1 min easy — recover"/>
+      {/* interval bar LEFT */}
+      <rect x={22} y={55} width={96} height={55} rx={6} fill="rgba(212,116,138,0.12)" stroke={PK} strokeWidth={1.2} strokeOpacity={0.5}/>
+      <Cue x={70} y={76} text="push hard"/>
+      <Cue x={70} y={92} text="zone 3"/>
+      <Cue x={70} y={122} text="2 min"/>
+      {/* interval bar RIGHT */}
+      <rect x={162} y={72} width={96} height={38} rx={6} fill="rgba(212,116,138,0.07)" stroke={PK} strokeWidth={1.2} strokeOpacity={0.25}/>
+      <Cue x={210} y={87} text="easy spin"/>
+      <Cue x={210} y={122} text="1 min"/>
+      <Arr x1={120} y1={82} x2={158} y2={82} color={PK}/>
+      <Cue x={140} y={148} text="repeat 4 times"/>
+    </svg>
+  ),
+
+  // ─── PHASE 2 UPPER ───────────────────────────────────────────────────
+  "Ball Chest Stretch": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Floor2 y={140}/>
+      <Divider h={152}/>
+      <FL x={70} text="drape over ball"/>
+      <FL x={210} text="arms open wide"/>
+      <Ball cx={68} cy={110} r={22}/>
+      <Ball cx={210} cy={110} r={22}/>
+      {/* LEFT: draped, arms at sides */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={68} cy={72} r={9}/>
+        <path d="M60,82 Q40,88 25,98" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round"/>
+        <path d="M76,82 Q96,88 111,98" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round"/>
+        <Seg x1={28} y1={98} x2={22} y2={140}/><Seg x1={108} y1={98} x2={114} y2={140}/>
+      </g>
+      {/* RIGHT: arms opened out */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={210} cy={72} r={9}/>
+        <path d="M202,82 Q182,88 167,88" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round"/>
+        <path d="M218,82 Q238,88 253,88" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round"/>
+        <Seg x1={170} y1={88} x2={162} y2={140}/><Seg x1={250} y1={88} x2={258} y2={140}/>
+      </g>
+      <Arr x1={162} y1={85} x2={148} y2={80} color={PK}/>
+      <Arr x1={258} y1={85} x2={272} y2={80} color={PK}/>
+      <Cue x={210} y={156} text="breathe into the stretch"/>
+    </svg>
+  ),
+
+  "Neck & Trap Release": ()=>(
+    <svg viewBox="0 0 280 165" width="100%" style={{maxWidth:280}}>
+      <Divider h={145}/>
+      <FL x={70} text="head upright"/>
+      <FL x={210} text="ear to shoulder"/>
+      {/* LEFT: neutral head */}
+      <g color="#9a7a7a" opacity={0.45}>
+        <Head cx={68} cy={42} r={14}/>
+        <Seg x1={68} y1={56} x2={68} y2={92}/>
+        <Seg x1={68} y1={72} x2={46} y2={84}/><Seg x1={68} y1={72} x2={90} y2={84}/>
+      </g>
+      {/* RIGHT: head tilted */}
+      <g color="#9a7a7a" opacity={0.9}>
+        <Head cx={205} cy={50} r={14}/>
+        <Seg x1={212} y1={60} x2={218} y2={92}/>
+        <Seg x1={218} y1={78} x2={196} y2={88}/><Seg x1={218} y1={78} x2={240} y2={84}/>
+      </g>
+      <Arr x1={185} y1={38} x2={200} y2={48} color={PK}/>
+      <Cue x={180} y={34} text="tilt" anchor="end"/>
+      {/* tension line on opposite trap */}
+      <path d="M240,84 Q255,95 252,108" fill="none" stroke={PK} strokeWidth={1.5} strokeDasharray="3 2" strokeOpacity={0.6}/>
+      <Cue x={210} y={125} text="feel stretch here"/>
+      <Cue x={210} y={140} text="30 sec each side"/>
+    </svg>
+  ),
+};
+
+// Fallback
+function FallbackDiagram({name}){
+  const w = name.split(" ").slice(0,3).join(" ");
+  return (
+    <svg viewBox="0 0 280 120" width="100%" style={{maxWidth:280}}>
+      <circle cx={140} cy={55} r={35} fill="rgba(212,116,138,0.07)" stroke={PK} strokeWidth={1} strokeOpacity={0.3}/>
+      <text x={140} y={60} fontSize="11" fill="#9a7a7a" textAnchor="middle" fontFamily="Jost,sans-serif">{w}</text>
+      <text x={140} y={95} fontSize="9.5" fill={PK} textAnchor="middle" fontFamily="Jost,sans-serif">see exercise note above</text>
+    </svg>
+  );
+}
+
+function ExerciseDiagram({name}){
+  const Comp = DIAGRAMS[name];
+  return (
+    <div style={{display:"flex",justifyContent:"center",
+      background:"rgba(255,245,242,0.6)",border:`1px solid rgba(220,180,180,0.2)`,
+      borderRadius:14,padding:"12px 8px",marginBottom:12}}>
+      {Comp ? <Comp/> : <FallbackDiagram name={name}/>}
+    </div>
+  );
+}
+
+// ── Exercise Timer ──
+function ExerciseTimer({seconds}){
+  const [timeLeft,setTimeLeft]=useState(seconds);
+  const [running,setRunning]=useState(false);
+  const [done,setDone]=useState(false);
+  const intervalRef=React.useRef(null);
+
+  function start(){
+    if(done){ setTimeLeft(seconds);setDone(false); }
+    setRunning(true);
+  }
+  function pause(){ setRunning(false); }
+  function reset(){ setRunning(false);setTimeLeft(seconds);setDone(false); }
+
+  useEffect(()=>{
+    if(running&&timeLeft>0){
+      intervalRef.current=setInterval(()=>setTimeLeft(v=>{
+        if(v<=1){ setRunning(false);setDone(true);return 0; }
+        return v-1;
+      }),1000);
+    }
+    return()=>clearInterval(intervalRef.current);
+  },[running]);
+
+  const pct=(timeLeft/seconds)*100;
+  const mins=Math.floor(timeLeft/60);
+  const secs=timeLeft%60;
+  const displayTime=`${mins>0?mins+":":""}${String(secs).padStart(mins>0?2:1,"0")}${mins>0?"":"s"}`;
+
+  return (
+    <div style={{background:done?"rgba(157,191,160,0.15)":"rgba(255,245,242,0.7)",
+      border:`1px solid ${done?"rgba(157,191,160,0.4)":"rgba(220,180,180,0.25)"}`,
+      borderRadius:14,padding:"12px 14px",marginBottom:12,transition:"all 0.3s"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <span style={{fontSize:11,color:C.muted}}>⏱ Timer</span>
+        {done&&<span style={{fontSize:11,color:C.sage,fontWeight:600}}>✓ Done!</span>}
+      </div>
+      {/* Ring progress */}
+      <div style={{display:"flex",alignItems:"center",gap:14}}>
+        <div style={{position:"relative",width:52,height:52,flexShrink:0}}>
+          <svg width="52" height="52" viewBox="0 0 52 52">
+            <circle cx="26" cy="26" r="22" fill="none" stroke="rgba(180,130,130,0.12)" strokeWidth="4"/>
+            <circle cx="26" cy="26" r="22" fill="none"
+              stroke={done?C.sage:C.rose} strokeWidth="4"
+              strokeDasharray={`${2*Math.PI*22}`}
+              strokeDashoffset={`${2*Math.PI*22*(1-pct/100)}`}
+              strokeLinecap="round"
+              transform="rotate(-90 26 26)"
+              style={{transition:"stroke-dashoffset 0.9s linear,stroke 0.3s"}}/>
+          </svg>
+          <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:11,fontWeight:700,color:done?C.sage:C.rose,fontFamily:"'Jost',sans-serif"}}>
+            {displayTime}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:6,flex:1}}>
+          {!running&&!done&&<button onClick={start} className="btn-primary" style={{flex:1,padding:"8px 0",fontSize:12}}>▶ Start</button>}
+          {running&&<button onClick={pause} className="btn-soft" style={{flex:1,padding:"8px 0",fontSize:12}}>⏸ Pause</button>}
+          {done&&<button onClick={start} className="btn-primary" style={{flex:1,padding:"8px 0",fontSize:12}}>↺ Again</button>}
+          {(running||done||timeLeft<seconds)&&<button onClick={reset} className="btn-soft" style={{padding:"8px 12px",fontSize:12}}>↺</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Parse a timed rep string like "45 sec", "2 min", "30 sec ea" → seconds, or null
+function parseTimerSeconds(repsStr){
+  if(!repsStr) return null;
+  const lower=repsStr.toLowerCase();
+  const minMatch=lower.match(/(\d+)\s*min/);
+  const secMatch=lower.match(/(\d+)\s*sec/);
+  if(minMatch) return parseInt(minMatch[1])*60 + (secMatch?parseInt(secMatch[1]):0);
+  if(secMatch) return parseInt(secMatch[1]);
+  return null;
+}
+
 // ── Workout Modal ──
-function WorkoutModal({workout,onClose,onComplete}){
+function WorkoutModal({workout,onClose,onComplete,isRepeat}){
   const [step,setStep]=useState(-1);
   const [done,setDone]=useState(false);
+  const xpEarned=isRepeat?Math.floor(workout.xp/2):workout.xp;
+
   if(done) return (
     <div style={OV}><div style={{...MB,textAlign:"center",padding:"40px 28px"}}>
       <div style={{fontSize:52,marginBottom:10}}>✨</div>
       <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.rose,fontStyle:"italic"}}>Beautifully Done</div>
-      <div style={{color:C.muted,margin:"8px 0 6px",fontSize:13}}>You earned <span style={{color:C.rose,fontWeight:600}}>+{workout.xp} xp</span></div>
-      <div style={{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap",marginBottom:20}}>
-        {Object.entries(workout.statGains).map(([k,v])=>(
-          <span key={k} style={{fontSize:12,background:`${statMeta[k].color}12`,color:statMeta[k].color,borderRadius:99,padding:"3px 10px",border:`1px solid ${statMeta[k].color}25`}}>
-            {statMeta[k].icon} +{v} {statMeta[k].label}
-          </span>
-        ))}
+      <div style={{color:C.muted,margin:"8px 0 6px",fontSize:13}}>
+        You earned <span style={{color:C.rose,fontWeight:600}}>+{xpEarned} xp</span>
+        {isRepeat&&<span style={{color:C.muted,fontSize:11}}> (repeat bonus)</span>}
       </div>
-      <button className="btn-primary" style={{width:"100%"}} onClick={()=>{onComplete(workout);onClose();}}>Collect & Return ✦</button>
+      {!isRepeat&&(
+        <div style={{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap",marginBottom:20}}>
+          {Object.entries(workout.statGains).map(([k,v])=>(
+            <span key={k} style={{fontSize:12,background:`${statMeta[k].color}12`,color:statMeta[k].color,borderRadius:99,padding:"3px 10px",border:`1px solid ${statMeta[k].color}25`}}>
+              {statMeta[k].icon} +{v} {statMeta[k].label}
+            </span>
+          ))}
+        </div>
+      )}
+      <button className="btn-primary" style={{width:"100%",marginTop:isRepeat?20:0}} onClick={()=>{onComplete(workout,isRepeat);onClose();}}>Collect & Return ✦</button>
     </div></div>
   );
+
   if(step===-1) return (
     <div style={OV}><div style={MB}>
       <button onClick={onClose} style={CB}>✕</button>
+      {isRepeat&&(
+        <div style={{background:`${C.peach}18`,border:`1px solid ${C.peach}35`,borderRadius:10,padding:"6px 12px",marginBottom:12,fontSize:11,color:C.peach}}>
+          ↺ Repeat session · +{xpEarned} xp (50% bonus)
+        </div>
+      )}
       <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:24,color:C.text,marginBottom:4}}>{workout.title}</div>
-      <div style={{fontSize:12,color:C.muted,marginBottom:16}}>{workout.type} · {workout.duration} min · +{workout.xp} xp</div>
+      <div style={{fontSize:12,color:C.muted,marginBottom:16}}>{workout.type} · {workout.duration} min · +{xpEarned} xp</div>
       <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:20}}>
         {workout.exercises.map((ex,i)=>(
           <div key={i} style={{background:"rgba(255,245,242,0.8)",border:"1px solid rgba(220,180,180,0.18)",borderRadius:12,padding:"10px 14px"}}>
@@ -358,16 +1785,20 @@ function WorkoutModal({workout,onClose,onComplete}){
       <button className="btn-primary" style={{width:"100%"}} onClick={()=>setStep(0)}>Begin ✦</button>
     </div></div>
   );
+
   const ex=workout.exercises[step];
+  const timerSecs=parseTimerSeconds(ex.reps);
   return (
     <div style={OV}><div style={{...MB,textAlign:"center"}}>
       <button onClick={onClose} style={CB}>✕</button>
       <div style={{fontSize:11,color:C.muted,letterSpacing:2,marginBottom:6,textTransform:"uppercase"}}>{step+1} of {workout.exercises.length}</div>
-      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,color:C.text,fontStyle:"italic",lineHeight:1.2}}>{ex.name}</div>
-      <div style={{background:"linear-gradient(135deg,rgba(255,235,235,0.8),rgba(255,245,240,0.8))",border:`1px solid ${C.border}`,borderRadius:14,padding:"16px",margin:"14px 0"}}>
-        <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.rose}}>{ex.sets} sets × {ex.reps}</div>
-        <div style={{fontSize:12,color:C.muted,marginTop:5,fontStyle:"italic"}}>{ex.note}</div>
+      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,fontStyle:"italic",lineHeight:1.2,marginBottom:10}}>{ex.name}</div>
+      <ExerciseDiagram name={ex.name}/>
+      <div style={{background:"linear-gradient(135deg,rgba(255,235,235,0.8),rgba(255,245,240,0.8))",border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:timerSecs?8:14}}>
+        <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:20,color:C.rose}}>{ex.sets} sets × {ex.reps}</div>
+        <div style={{fontSize:12,color:C.muted,marginTop:4,fontStyle:"italic"}}>{ex.note}</div>
       </div>
+      {timerSecs&&<ExerciseTimer key={`${workout.id}-${step}`} seconds={timerSecs}/>}
       <div style={{display:"flex",gap:8}}>
         {step>0&&<button className="btn-soft" style={{flex:1}} onClick={()=>setStep(s=>s-1)}>← Back</button>}
         <button className="btn-primary" style={{flex:2}} onClick={()=>step<workout.exercises.length-1?setStep(s=>s+1):setDone(true)}>
@@ -384,67 +1815,176 @@ function WorkoutModal({workout,onClose,onComplete}){
 }
 
 // ── Boss Modal ──
-function BossModal({boss,onClose,onDefeat}){
-  const [hp,setHp]=useState(boss.hp);
-  const [log,setLog]=useState([]);
-  const [won,setWon]=useState(false);
+const PLAYER_MAX_HP = 100;
+const BOSS_ATTACKS = [
+  {name:"Heavy Blow",    dmg:[12,18], msg:"lands a heavy blow on you"},
+  {name:"Dark Surge",    dmg:[8,14],  msg:"unleashes a dark surge"},
+  {name:"Crushing Doubt",dmg:[15,22], msg:"fills you with crushing doubt"},
+  {name:"Shadow Lunge",  dmg:[10,16], msg:"lunges from the shadows"},
+  {name:"Drain",         dmg:[6,10],  msg:"drains your energy"},
+];
+
+function BossModal({boss,onClose,onDefeat,charStats,learnedSkills}){
+  const [bossHp, setBossHp]   = useState(boss.hp);
+  const [playerHp,setPlayerHp]= useState(PLAYER_MAX_HP);
+  const [log,    setLog]      = useState([`⚔️ ${boss.name} appears! Weakness: ${boss.weakness}`]);
+  const [won,    setWon]      = useState(false);
+  const [lost,   setLost]     = useState(false);
+  const [cooling,setCooling]  = useState(false); // prevent spam clicking
+  const [shake,  setShake]    = useState(false);
+
+  // stat bonus: every 10 combined stats = +1 dmg
+  const statBonus = Math.floor((charStats.str+charStats.agi+charStats.pwr)/10);
+  // Mana Veil skill halves incoming damage
+  const hasManaVeil = learnedSkills.includes("Mana Veil");
+
+  function triggerShake(){ setShake(true); setTimeout(()=>setShake(false),400); }
+
   function attack(type){
-    const dmg=Math.max(1,(boss.dmgTypes[type]||8)+Math.floor(Math.random()*6));
-    const newHp=Math.max(0,hp-dmg);
-    setHp(newHp);
-    setLog(prev=>[`${type} strike — ${dmg} damage!`,...prev.slice(0,3)]);
-    if(newHp<=0) setWon(true);
+    if(cooling||won||lost) return;
+    setCooling(true);
+    setTimeout(()=>setCooling(false),700);
+
+    // --- Player attacks boss ---
+    const base = boss.dmgTypes[type]||8;
+    const isWeak = type===boss.weakness||boss.weakness==="All";
+    const playerDmg = Math.max(1, base + statBonus + Math.floor(Math.random()*6));
+    const newBossHp = Math.max(0, bossHp - playerDmg);
+    setBossHp(newBossHp);
+
+    const hitLabel = isWeak ? `✨ WEAKNESS HIT! ${type} — ${playerDmg} dmg!` : `${type} — ${playerDmg} dmg`;
+
+    if(newBossHp<=0){
+      setLog(prev=>[hitLabel,"💀 Boss defeated!","🎉 Victory!",...prev.slice(0,2)]);
+      setWon(true);
+      return;
+    }
+
+    // --- Boss counter-attacks ---
+    const bossMove = BOSS_ATTACKS[Math.floor(Math.random()*BOSS_ATTACKS.length)];
+    const rawBossDmg = bossMove.dmg[0] + Math.floor(Math.random()*(bossMove.dmg[1]-bossMove.dmg[0]));
+    const actualBossDmg = hasManaVeil ? Math.floor(rawBossDmg/2) : rawBossDmg;
+    const newPlayerHp = Math.max(0, playerHp - actualBossDmg);
+    setPlayerHp(newPlayerHp);
+    triggerShake();
+
+    const shieldNote = hasManaVeil ? " (Mana Veil halved!)" : "";
+    setLog(prev=>[
+      hitLabel,
+      `💔 ${boss.name} ${bossMove.msg} — ${actualBossDmg} dmg${shieldNote}`,
+      ...prev.slice(0,2)
+    ]);
+
+    if(newPlayerHp<=0){ setLost(true); }
   }
-  const hpPct=(hp/boss.maxHp)*100;
+
+  const bossHpPct   = (bossHp/boss.maxHp)*100;
+  const playerHpPct = (playerHp/PLAYER_MAX_HP)*100;
+  const playerHpColor = playerHpPct>60?C.sage:playerHpPct>30?C.peach:C.rose;
+
   if(won) return (
     <div style={OV}><div style={{...MB,textAlign:"center",padding:"36px 28px"}}>
       <div style={{fontSize:52,marginBottom:8}}>🎉</div>
       <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,color:C.rose,fontStyle:"italic"}}>Victory, Darling!</div>
-      <div style={{color:C.muted,fontSize:13,margin:"8px 0 20px"}}>{boss.name} has been defeated.</div>
+      <div style={{color:C.muted,fontSize:13,margin:"8px 0 6px"}}>{boss.name} has been defeated.</div>
+      <div style={{fontSize:12,color:C.muted,marginBottom:20}}>You finished with <span style={{color:C.sage,fontWeight:600}}>{playerHp} HP</span> remaining.</div>
       <div style={{background:"rgba(255,235,235,0.8)",border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",marginBottom:20}}>
         <div style={{fontSize:14,color:C.rose,fontWeight:600}}>+{boss.xpReward} XP earned ✦</div>
       </div>
       <button className="btn-primary" style={{width:"100%"}} onClick={()=>{onDefeat(boss);onClose();}}>Claim Victory ✦</button>
     </div></div>
   );
-  return (
-    <div style={OV}><div style={MB}>
-      <button onClick={onClose} style={CB}>✕</button>
-      <div style={{textAlign:"center",marginBottom:14}}>
-        <div style={{fontSize:44,marginBottom:4}}>{boss.icon}</div>
-        <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text}}>{boss.name}</div>
-        <div style={{fontSize:11,color:C.muted,fontStyle:"italic",marginTop:3}}>{boss.desc}</div>
+
+  if(lost) return (
+    <div style={OV}><div style={{...MB,textAlign:"center",padding:"36px 28px"}}>
+      <div style={{fontSize:52,marginBottom:8}}>💔</div>
+      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,color:C.muted,fontStyle:"italic"}}>Defeated...</div>
+      <div style={{color:C.muted,fontSize:13,margin:"8px 0 20px",fontStyle:"italic",lineHeight:1.6}}>
+        {boss.name} was too strong this time. Rest, train more, and return stronger.
       </div>
-      <div style={{marginBottom:14}}>
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-          <span style={{fontSize:11,color:C.muted}}>Boss HP</span>
-          <span style={{fontSize:11,color:C.rose}}>{hp} / {boss.maxHp}</span>
-        </div>
-        <div style={{height:10,background:"rgba(180,130,130,0.12)",borderRadius:99,overflow:"hidden"}}>
-          <div style={{height:"100%",width:`${hpPct}%`,background:`linear-gradient(90deg,${C.rose},${C.blush})`,borderRadius:99,transition:"width 0.4s"}}/>
-        </div>
-        <div style={{fontSize:10,color:C.rose,marginTop:4}}>⚠ Weakness: {boss.weakness}</div>
+      <div style={{background:"rgba(255,245,242,0.8)",border:`1px solid ${C.border}`,borderRadius:14,padding:"12px",marginBottom:20,fontSize:12,color:C.muted}}>
+        💡 Tip: Build your stats with more workouts, then challenge again. Target the <span style={{color:C.rose,fontWeight:600}}>{boss.weakness}</span> weakness!
       </div>
-      <div style={{fontSize:12,color:C.muted,marginBottom:8,textAlign:"center",fontStyle:"italic"}}>Choose your attack:</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:14}}>
-        {["Mobility","Strength","Cardio","Agility","Power"].map(t=>(
-          <button key={t} onClick={()=>attack(t)} style={{
-            background:t===boss.weakness?"linear-gradient(135deg,#e8a0a0,#d4748a)":"rgba(255,255,255,0.8)",
-            color:t===boss.weakness?"#fff":C.muted,
-            border:`1px solid ${t===boss.weakness?C.rose:"rgba(220,160,160,0.25)"}`,
-            borderRadius:10,padding:"8px 4px",fontSize:11,cursor:"pointer",fontFamily:"'Jost',sans-serif",
-            boxShadow:t===boss.weakness?"0 3px 12px rgba(212,116,138,0.25)":"none",
-          }}>
-            {t==="Mobility"?"🧘":t==="Strength"?"💪":t==="Cardio"?"🚴":t==="Agility"?"🏃":"⚡"} {t}
-          </button>
-        ))}
-      </div>
-      {log.length>0&&(
-        <div style={{background:"rgba(255,245,242,0.8)",borderRadius:12,padding:"8px 12px"}}>
-          {log.map((l,i)=><div key={i} style={{fontSize:11,color:i===0?C.rose:C.muted,marginBottom:i<log.length-1?3:0}}>{l}</div>)}
-        </div>
-      )}
+      <button className="btn-soft" style={{width:"100%"}} onClick={onClose}>Retreat & Train More</button>
     </div></div>
+  );
+
+  return (
+    <div style={OV}>
+      <div style={{...MB, transition:"transform 0.1s", transform:shake?"translateX(-4px)":"translateX(0)"}}>
+        <button onClick={onClose} style={CB}>✕</button>
+
+        {/* Boss info */}
+        <div style={{textAlign:"center",marginBottom:12}}>
+          <div style={{fontSize:40,marginBottom:2}}>{boss.icon}</div>
+          <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:20,color:C.text}}>{boss.name}</div>
+        </div>
+
+        {/* Boss HP */}
+        <div style={{marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+            <span style={{fontSize:11,color:C.muted}}>👹 Boss HP</span>
+            <span style={{fontSize:11,color:C.rose,fontWeight:600}}>{bossHp} / {boss.maxHp}</span>
+          </div>
+          <div style={{height:10,background:"rgba(180,130,130,0.12)",borderRadius:99,overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${bossHpPct}%`,background:`linear-gradient(90deg,${C.rose},${C.blush})`,borderRadius:99,transition:"width 0.35s"}}/>
+          </div>
+        </div>
+
+        {/* Player HP */}
+        <div style={{marginBottom:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+            <span style={{fontSize:11,color:C.muted}}>💗 Your HP</span>
+            <span style={{fontSize:11,color:playerHpColor,fontWeight:600}}>{playerHp} / {PLAYER_MAX_HP}</span>
+          </div>
+          <div style={{height:10,background:"rgba(180,130,130,0.12)",borderRadius:99,overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${playerHpPct}%`,background:`linear-gradient(90deg,${playerHpColor}80,${playerHpColor})`,borderRadius:99,transition:"width 0.35s"}}/>
+          </div>
+          {hasManaVeil&&<div style={{fontSize:10,color:C.lavender,marginTop:3}}>🔵 Mana Veil active — incoming damage halved</div>}
+        </div>
+
+        {/* Weakness hint */}
+        <div style={{fontSize:11,color:C.rose,textAlign:"center",marginBottom:8,fontStyle:"italic"}}>
+          ⚠ Weakness: <strong>{boss.weakness}</strong> — hits hardest!
+        </div>
+
+        {/* Attack buttons */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:12}}>
+          {["Mobility","Strength","Cardio","Agility","Power"].map(t=>{
+            const isWeak=t===boss.weakness||boss.weakness==="All";
+            return (
+              <button key={t} onClick={()=>attack(t)} disabled={cooling}
+                style={{
+                  background:isWeak?"linear-gradient(135deg,#e8a0a0,#d4748a)":"rgba(255,255,255,0.8)",
+                  color:isWeak?"#fff":C.muted,
+                  border:`1px solid ${isWeak?C.rose:"rgba(220,160,160,0.25)"}`,
+                  borderRadius:10,padding:"9px 4px",fontSize:11,
+                  cursor:cooling?"not-allowed":"pointer",
+                  fontFamily:"'Jost',sans-serif",fontWeight:500,
+                  opacity:cooling?0.6:1,transition:"opacity 0.2s",
+                  boxShadow:isWeak?"0 3px 12px rgba(212,116,138,0.25)":"none",
+                }}>
+                {t==="Mobility"?"🧘":t==="Strength"?"💪":t==="Cardio"?"🚴":t==="Agility"?"🏃":"⚡"}<br/>
+                <span style={{fontSize:10}}>{t}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Battle log */}
+        <div style={{background:"rgba(255,245,242,0.8)",borderRadius:12,padding:"8px 12px",marginBottom:10,minHeight:60}}>
+          {log.slice(0,3).map((l,i)=>(
+            <div key={i} style={{fontSize:11,color:i===0?C.text:C.muted,marginBottom:i<2?3:0,fontWeight:i===0?500:400}}>{l}</div>
+          ))}
+        </div>
+
+        {/* Flee */}
+        <button onClick={onClose} style={{width:"100%",background:"transparent",border:"none",
+          fontSize:11,color:C.muted,cursor:"pointer",fontFamily:"'Jost',sans-serif",padding:"4px"}}>
+          🏃 Flee the battle
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -502,15 +2042,18 @@ function App(){
     });
   },[xp]);
 
-  function handleComplete(workout){
-    if(completedIds.includes(workout.id)) return;
-    const gains={...workout.statGains};
-    if(gains[cls.bonusStat]) gains[cls.bonusStat]+=2;
-    setXp(v=>v+workout.xp);
-    setCompletedIds(prev=>[...prev,workout.id]);
+  function handleComplete(workout, isRepeat=false){
+    if(!isRepeat && completedIds.includes(workout.id)) return;
+    const xpGain = isRepeat ? Math.floor(workout.xp/2) : workout.xp;
+    setXp(v=>v+xpGain);
+    if(!isRepeat){
+      const gains={...workout.statGains};
+      if(gains[cls.bonusStat]) gains[cls.bonusStat]+=2;
+      setCompletedIds(prev=>[...prev,workout.id]);
+      setCharStats(prev=>{const n={...prev};Object.entries(gains).forEach(([k,v])=>{n[k]=(n[k]||0)+v;});return n;});
+    }
     setStreak(v=>v+1);
     setTotalWorkouts(v=>v+1);
-    setCharStats(prev=>{const n={...prev};Object.entries(gains).forEach(([k,v])=>{n[k]=(n[k]||0)+v;});return n;});
     if((totalWorkouts+1)%3===0) setAbilityPts(v=>v+1);
     setQuestProgress(prev=>({
       workouts:prev.workouts+1,
@@ -707,7 +2250,7 @@ function App(){
             </div>
             <div className="card" style={{padding:"16px",marginBottom:14}}>
               <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>⚔️ Stats</div>
-              {Object.entries(charStats).map(([k,v])=><StatBar key={k} statKey={k} value={v}/>)}
+              <RadarChart stats={charStats}/>
             </div>
             <div className="card" style={{padding:"16px",marginBottom:14}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
@@ -823,8 +2366,8 @@ function App(){
         )}
       </div>
 
-      {activeWorkout&&<WorkoutModal workout={activeWorkout} onClose={()=>setActiveWorkout(null)} onComplete={handleComplete}/>}
-      {activeBoss&&<BossModal boss={activeBoss} onClose={()=>setActiveBoss(null)} onDefeat={handleBossDefeat}/>}
+      {activeWorkout&&<WorkoutModal workout={activeWorkout} onClose={()=>setActiveWorkout(null)} onComplete={handleComplete} isRepeat={completedIds.includes(activeWorkout.id)}/>}
+      {activeBoss&&<BossModal boss={activeBoss} onClose={()=>setActiveBoss(null)} onDefeat={handleBossDefeat} charStats={charStats} learnedSkills={learnedSkills}/>}
 
       <style>{`
         @keyframes sparkle{0%,100%{transform:scale(1) rotate(0deg);opacity:1}50%{transform:scale(1.3) rotate(15deg);opacity:0.7}}
